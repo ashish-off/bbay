@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.9.0",
     "@reduxjs/toolkit": "^2.12.0",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.39.0",
