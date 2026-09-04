@@ -10,8 +10,235 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
+// ─── Enums ──────────────────────────────────────────────────────────
 
+enum ListingType {
+    AUCTION
+    FIXED
+}
+
+enum ListingStatus {
+    ACTIVE
+    SOLD
+    EXPIRED
+    CANCELLED
+}
+
+enum OrderStatus {
+    ORDER_PLACED
+    PROCESSING
+    SHIPPED
+    DELIVERED
+}
+
+enum PaymentMethod {
+    COD
+    ESEWA
+}
+
+// ─── User ───────────────────────────────────────────────────────────
+// Required for creating a User: id, name, email, image
+// Cart stored as JSON { listingId: quantity }
+
+model User {
+    id       String  @id
+    name     String
+    email    String
+    image    String
+    cart     Json    @default("{}")
+    isActive Boolean @default(true)
+
+    // Relations
+    ratings        Rating[]
+    addresses      Address[]
+    listings       Listing[]  @relation("SellerListings")
+    bids           Bid[]
+    buyerOrders    Order[]    @relation("BuyerRelation")
+    sellerOrders   Order[]    @relation("SellerRelation")
+    watchlistItems Watchlist[]
+}
+
+// ─── Listing (replaces Product + Store) ─────────────────────────────
+// Required: name, description, category, images, listingType, sellerId
+// Auction fields required when listingType = AUCTION: startingBid, auctionEndTime
+// Fixed fields required when listingType = FIXED: price
+
+model Listing {
+    id             String        @id @default(cuid())
+    name           String
+    description    String
+    category       String
+    images         String[]
+    listingType    ListingType
+    status         ListingStatus @default(ACTIVE)
+    inStock        Boolean       @default(true)
+
+    // Fixed price fields
+    price          Float?
+    mrp            Float?
+
+    // Auction fields
+    startingBid    Float?
+    currentBid     Float?        @default(0)
+    buyNowPrice    Float?
+    bidCount       Int           @default(0)
+    auctionEndTime DateTime?
+
+    // Seller (any user can list)
+    sellerId       String
+
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt
+
+    // Relations
+    seller     User        @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Cascade)
+    bids       Bid[]
+    orderItems OrderItem[]
+    ratings    Rating[]
+    watchedBy  Watchlist[]
+
+    // Indexes for efficient queries
+    @@index([sellerId])
+    @@index([category])
+    @@index([listingType, status])
+    @@index([auctionEndTime])
+}
+
+// ─── Bid ────────────────────────────────────────────────────────────
+// Required: amount, listingId, bidderId
+
+model Bid {
+    id        String   @id @default(cuid())
+    amount    Float
+    listingId String
+    bidderId  String
+    createdAt DateTime @default(now())
+
+    // Relations
+    listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+    bidder  User    @relation(fields: [bidderId], references: [id], onDelete: Cascade)
+
+    // Indexes
+    @@index([listingId, createdAt])
+    @@index([bidderId])
+}
+
+// ─── Watchlist ──────────────────────────────────────────────────────
+// Composite PK prevents duplicate watches
+
+model Watchlist {
+    userId    String
+    listingId String
+    createdAt DateTime @default(now())
+
+    user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+    @@id([userId, listingId])
+}
+
+// ─── Order ──────────────────────────────────────────────────────────
+// Required: total, userId, sellerId, addressId, paymentMethod, orderItems (nested)
+
+model Order {
+    id            String        @id @default(cuid())
+    total         Float
+    status        OrderStatus   @default(ORDER_PLACED)
+    userId        String
+    sellerId      String
+    addressId     String
+    isPaid        Boolean       @default(false)
+    paymentMethod PaymentMethod @default(COD)
+    createdAt     DateTime      @default(now())
+    updatedAt     DateTime      @updatedAt
+    isCouponUsed  Boolean       @default(false)
+    coupon        Json          @default("{}")
+    orderItems    OrderItem[]
+
+    // Relations
+    user    User    @relation("BuyerRelation", fields: [userId], references: [id])
+    seller  User    @relation("SellerRelation", fields: [sellerId], references: [id])
+    address Address @relation(fields: [addressId], references: [id])
+
+    // Indexes
+    @@index([userId])
+    @@index([sellerId])
+}
+
+// ─── OrderItem ──────────────────────────────────────────────────────
+// Required: orderId, listingId, quantity, price
+
+model OrderItem {
+    orderId   String
+    listingId String
+    quantity  Int
+    price     Float
+
+    // Relations
+    order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+    listing Listing @relation(fields: [listingId], references: [id])
+
+    @@id([orderId, listingId])
+}
+
+// ─── Rating ─────────────────────────────────────────────────────────
+// Required: rating, review, userId, listingId, orderId
+
+model Rating {
+    id        String   @id @default(cuid())
+    rating    Int
+    review    String
+    userId    String
+    listingId String
+    orderId   String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, listingId, orderId])
+}
+
+// ─── Address ────────────────────────────────────────────────────────
+// Required: userId, name, email, street, city, state, zip, country, phone
+
+model Address {
+    id        String   @id @default(cuid())
+    userId    String
+    name      String
+    email     String
+    street    String
+    city      String
+    state     String
+    zip       String
+    country   String
+    phone     String
+    createdAt DateTime @default(now())
+
+    // Relations
+    orders Order[]
+    user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+}
+
+// ─── Coupon ─────────────────────────────────────────────────────────
+// Required: code, description, discount, forNewUser, isPublic, expiresAt
+
+model Coupon {
+    code        String   @id
+    description String
+    discount    Float
+    forNewUser  Boolean
+    forMember   Boolean  @default(false)
+    isPublic    Boolean
+    expiresAt   DateTime
+    createdAt   DateTime @default(now())
+}
