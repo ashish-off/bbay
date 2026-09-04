@@ -104,11 +104,6 @@ const Navbar = () => {
                     label="Orders"
                     onClick={() => router.push("/orders")}
                   />
-                  <UserButton.Action
-                    labelIcon={<Heart size={16} />}
-                    label="Watchlist"
-                    onClick={() => router.push("/watchlist")}
-                  />
                 </UserButton.MenuItems>
               </UserButton>
             )}
