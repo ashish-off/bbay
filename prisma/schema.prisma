@@ -58,9 +58,10 @@ model User {
     addresses      Address[]
     listings       Listing[]  @relation("SellerListings")
     bids           Bid[]
-    buyerOrders    Order[]    @relation("BuyerRelation")
-    sellerOrders   Order[]    @relation("SellerRelation")
+    buyerOrders    Order[]     @relation("BuyerRelation")
+    sellerOrders   Order[]     @relation("SellerRelation")
     watchlistItems Watchlist[]
+    cartItems      CartItem[]
 }
 
 // ─── Listing (replaces Product + Store) ─────────────────────────────
@@ -101,6 +102,7 @@ model Listing {
     orderItems OrderItem[]
     ratings    Rating[]
     watchedBy  Watchlist[]
+    cartItems  CartItem[]
 
     // Indexes for efficient queries
     @@index([sellerId])
@@ -241,4 +243,21 @@ model Coupon {
     isPublic    Boolean
     expiresAt   DateTime
     createdAt   DateTime @default(now())
+}
+
+// ─── CartItem ────────────────────────────────────────────────────────
+model CartItem {
+    id        String   @id @default(cuid())
+    userId    String
+    listingId String
+    quantity  Int      @default(1)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, listingId])
+    @@index([userId])
+    @@index([listingId])
 }

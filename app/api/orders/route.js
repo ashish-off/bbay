@@ -39,26 +39,49 @@ export async function POST(request) {
         return Response.json({ error: 'addressId required' }, { status: 400 })
     }
 
-    const cart = user.cart || {}
-    const listingIds = Object.keys(cart)
+    // Fetch cart items from CartItem table (and fallback to user.cart JSON if any)
+    const cartItems = await prisma.cartItem.findMany({
+        where: { userId: user.id },
+        include: {
+            listing: true,
+        },
+    })
 
-    if (listingIds.length === 0) {
-        return Response.json({ error: 'Cart is empty' }, { status: 400 })
+    const listingMap = {}
+    cartItems.forEach(ci => {
+        if (ci.listing && ci.listing.inStock && ci.listing.status === 'ACTIVE') {
+            listingMap[ci.listingId] = {
+                listing: ci.listing,
+                quantity: ci.quantity,
+            }
+        }
+    })
+
+    // Backward compatibility with legacy cart JSON
+    if (Object.keys(listingMap).length === 0 && user.cart && typeof user.cart === 'object') {
+        const legacyIds = Object.keys(user.cart)
+        if (legacyIds.length > 0) {
+            const legacyListings = await prisma.listing.findMany({
+                where: { id: { in: legacyIds }, inStock: true, status: 'ACTIVE' },
+            })
+            legacyListings.forEach(l => {
+                listingMap[l.id] = {
+                    listing: l,
+                    quantity: user.cart[l.id] || 1,
+                }
+            })
+        }
+    }
+
+    const itemsToOrder = Object.values(listingMap)
+    if (itemsToOrder.length === 0) {
+        return Response.json({ error: 'Cart is empty or items unavailable' }, { status: 400 })
     }
 
     // Verify address belongs to user
     const address = await prisma.address.findUnique({ where: { id: addressId } })
     if (!address || address.userId !== user.id) {
         return Response.json({ error: 'Invalid address' }, { status: 400 })
-    }
-
-    // Fetch listings
-    const listings = await prisma.listing.findMany({
-        where: { id: { in: listingIds }, inStock: true, status: 'ACTIVE' },
-    })
-
-    if (listings.length === 0) {
-        return Response.json({ error: 'No valid items in cart' }, { status: 400 })
     }
 
     // Handle coupon
@@ -74,18 +97,18 @@ export async function POST(request) {
 
     // Group items by seller
     const sellerGroups = {}
-    for (const listing of listings) {
-        const qty = cart[listing.id] || 1
+    for (const item of itemsToOrder) {
+        const { listing, quantity } = item
         const price = listing.buyNowPrice || listing.price || 0
         if (!sellerGroups[listing.sellerId]) {
             sellerGroups[listing.sellerId] = { items: [], total: 0 }
         }
         sellerGroups[listing.sellerId].items.push({
             listingId: listing.id,
-            quantity: qty,
+            quantity,
             price,
         })
-        sellerGroups[listing.sellerId].total += price * qty
+        sellerGroups[listing.sellerId].total += price * quantity
     }
 
     // Create one order per seller in a transaction
@@ -122,7 +145,10 @@ export async function POST(request) {
             createdOrders.push(order)
         }
 
-        // Clear cart
+        // Clear cart in both CartItem table and legacy JSON
+        await tx.cartItem.deleteMany({
+            where: { userId: user.id },
+        })
         await tx.user.update({
             where: { id: user.id },
             data: { cart: {} },

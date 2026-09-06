@@ -58,19 +58,52 @@ export async function POST(request) {
 
     // Upload images to ImageKit
     const imageUrls = []
-    for (let i = 1; i <= 4; i++) {
-        const file = formData.get(`image${i}`)
-        if (file && file.size > 0) {
-            const buffer = Buffer.from(await file.arrayBuffer())
-            const result = await uploadImage(buffer, file.name, '/listings')
-            imageUrls.push(result.url)
+    // Support multi-file upload under 'images'
+    const multiFiles = formData.getAll('images')
+    if (multiFiles && multiFiles.length > 0) {
+        for (const file of multiFiles) {
+            if (file && typeof file !== 'string' && file.size > 0) {
+                const buffer = Buffer.from(await file.arrayBuffer())
+                const result = await uploadImage(buffer, file.name, '/listings')
+                imageUrls.push(result.url)
+            }
+        }
+    }
+    // Also support individual keys image1, image2, etc.
+    if (imageUrls.length === 0) {
+        for (let i = 1; i <= 6; i++) {
+            const file = formData.get(`image${i}`)
+            if (file && typeof file !== 'string' && file.size > 0) {
+                const buffer = Buffer.from(await file.arrayBuffer())
+                const result = await uploadImage(buffer, file.name, '/listings')
+                imageUrls.push(result.url)
+            }
         }
     }
 
     const listingType = formData.get('listingType')?.toUpperCase() || 'FIXED'
     const isAuction = listingType === 'AUCTION'
 
-    const durationDays = parseInt(formData.get('duration') || '3')
+    // Flexible duration calculation (supports hours and days: 1h, 6h, 12h, 1d, 2d, 3d, 5d, 7d, 10d, 14d)
+    let durationHours = 72 // default 3 days
+    const durationHoursParam = formData.get('durationHours')
+    const rawDuration = formData.get('duration')
+
+    if (durationHoursParam) {
+        durationHours = parseFloat(durationHoursParam)
+    } else if (rawDuration) {
+        const str = String(rawDuration).trim().toLowerCase()
+        if (str.endsWith('h')) {
+            durationHours = parseFloat(str.replace('h', ''))
+        } else if (str.endsWith('d')) {
+            durationHours = parseFloat(str.replace('d', '')) * 24
+        } else {
+            const num = parseFloat(str)
+            // If <= 14, interpret as days for backward compatibility, else hours
+            durationHours = num <= 14 ? num * 24 : num
+        }
+    }
+
     const startingBid = parseFloat(formData.get('startingBid') || '0')
     const buyNowPrice = formData.get('buyNowPrice') ? parseFloat(formData.get('buyNowPrice')) : null
 
@@ -91,7 +124,7 @@ export async function POST(request) {
         currentBid: isAuction ? startingBid : null,
         buyNowPrice: isAuction ? buyNowPrice : null,
         auctionEndTime: isAuction
-            ? new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
+            ? new Date(Date.now() + Math.round(durationHours * 60 * 60 * 1000))
             : null,
     }
 

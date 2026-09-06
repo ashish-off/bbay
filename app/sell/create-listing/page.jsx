@@ -234,7 +234,7 @@ export default function CreateListing() {
                 {mutation.isPending ? (
                     <>
                         <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        Uploading to ImageKit & Publishing...
+                        Uploading...
                     </>
                 ) : (
                     listingType === 'auction' ? "Start Auction" : "List Buy It Now Item"

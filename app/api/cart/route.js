@@ -1,51 +1,137 @@
 import prisma from '@/lib/prisma'
 import { getAuthUser } from '@/lib/auth'
 
-// GET /api/cart — Auth required, get cart with resolved listings
+// GET /api/cart — Auth required, return user's CartItems with listing data
 export async function GET() {
     const authResult = await getAuthUser()
     if (!authResult) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { user } = authResult
-    const cart = user.cart || {}
 
-    // Resolve listing IDs to full listing data
-    const listingIds = Object.keys(cart)
-    if (listingIds.length === 0) {
-        return Response.json({ cart: {}, items: [] })
+    const cartItems = await prisma.cartItem.findMany({
+        where: { userId: user.id },
+        include: {
+            listing: {
+                include: {
+                    seller: { select: { id: true, name: true, image: true } },
+                },
+            },
+        },
+        orderBy: { createdAt: 'desc' },
+    })
+
+    const cartMap = {}
+    const items = cartItems.map(ci => {
+        cartMap[ci.listingId] = ci.quantity
+        return {
+            ...ci.listing,
+            cartItemId: ci.id,
+            quantity: ci.quantity,
+        }
+    })
+
+    return Response.json({ cart: cartMap, items })
+}
+
+// POST /api/cart — Auth required, add item or increment quantity in CartItem
+export async function POST(request) {
+    const authResult = await getAuthUser()
+    if (!authResult) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { user } = authResult
+    const { listingId, quantity = 1 } = await request.json()
+
+    if (!listingId) {
+        return Response.json({ error: 'listingId is required' }, { status: 400 })
     }
 
-    const listings = await prisma.listing.findMany({
-        where: { id: { in: listingIds } },
+    const listing = await prisma.listing.findUnique({ where: { id: listingId } })
+    if (!listing) {
+        return Response.json({ error: 'Listing not found' }, { status: 404 })
+    }
+
+    const cartItem = await prisma.cartItem.upsert({
+        where: {
+            userId_listingId: {
+                userId: user.id,
+                listingId,
+            },
+        },
+        update: {
+            quantity: { increment: quantity },
+        },
+        create: {
+            userId: user.id,
+            listingId,
+            quantity,
+        },
         include: {
-            seller: { select: { id: true, name: true, image: true } },
+            listing: {
+                include: {
+                    seller: { select: { id: true, name: true, image: true } },
+                },
+            },
         },
     })
 
-    const items = listings.map(listing => ({
-        ...listing,
-        quantity: cart[listing.id] || 1,
-    }))
-
-    return Response.json({ cart, items })
+    return Response.json({ success: true, item: cartItem })
 }
 
-// PUT /api/cart — Auth required, sync cart
+// PUT /api/cart — Auth required, update exact quantity for a listingId
 export async function PUT(request) {
     const authResult = await getAuthUser()
     if (!authResult) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { user } = authResult
-    const { cart } = await request.json()
+    const { listingId, quantity } = await request.json()
 
-    if (typeof cart !== 'object') {
-        return Response.json({ error: 'cart must be an object' }, { status: 400 })
+    if (!listingId || quantity === undefined) {
+        return Response.json({ error: 'listingId and quantity are required' }, { status: 400 })
     }
 
-    await prisma.user.update({
-        where: { id: user.id },
-        data: { cart },
+    if (quantity <= 0) {
+        await prisma.cartItem.deleteMany({
+            where: { userId: user.id, listingId },
+        })
+        return Response.json({ success: true, removed: true })
+    }
+
+    const cartItem = await prisma.cartItem.upsert({
+        where: {
+            userId_listingId: {
+                userId: user.id,
+                listingId,
+            },
+        },
+        update: { quantity },
+        create: {
+            userId: user.id,
+            listingId,
+            quantity,
+        },
     })
 
-    return Response.json({ cart, synced: true })
+    return Response.json({ success: true, item: cartItem })
+}
+
+// DELETE /api/cart — Auth required, delete item by listingId or clear entire cart
+export async function DELETE(request) {
+    const authResult = await getAuthUser()
+    if (!authResult) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { user } = authResult
+    const { searchParams } = new URL(request.url)
+    const listingId = searchParams.get('listingId')
+
+    if (listingId) {
+        await prisma.cartItem.deleteMany({
+            where: { userId: user.id, listingId },
+        })
+    } else {
+        await prisma.cartItem.deleteMany({
+            where: { userId: user.id },
+        })
+    }
+
+    return Response.json({ success: true })
 }

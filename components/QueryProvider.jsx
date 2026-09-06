@@ -7,8 +7,10 @@ export default function QueryProvider({ children }) {
     const [queryClient] = useState(() => new QueryClient({
         defaultOptions: {
             queries: {
-                staleTime: 30 * 1000,       // 30 seconds
-                refetchOnWindowFocus: true, // Auto refresh live bids when user switches tabs
+                staleTime: 60 * 1000,        // 1 min fresh cache
+                gcTime: 15 * 60 * 1000,      // 15 min memory cache
+                refetchOnWindowFocus: false, // Smooth browsing without random reloads
+                refetchOnReconnect: true,
                 retry: 1,
             },
         },

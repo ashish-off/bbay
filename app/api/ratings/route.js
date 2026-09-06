@@ -37,12 +37,11 @@ export async function POST(request) {
         return Response.json({ error: 'Rating must be 1-5' }, { status: 400 })
     }
 
-    // Verify user has a delivered order with this listing
+    // Verify user has an order with this listing
     const order = await prisma.order.findFirst({
         where: {
             id: orderId,
             userId: user.id,
-            status: 'DELIVERED',
             orderItems: {
                 some: { listingId },
             },
@@ -50,7 +49,7 @@ export async function POST(request) {
     })
 
     if (!order) {
-        return Response.json({ error: 'You can only rate delivered orders' }, { status: 400 })
+        return Response.json({ error: 'You can only review items you have ordered' }, { status: 400 })
     }
 
     // Check unique constraint
