@@ -4,7 +4,7 @@ import { addToCart } from "@/lib/features/cart/cartSlice";
 import { toggleWatchlist } from "@/lib/features/watchlist/watchlistSlice";
 import { StarIcon, TagIcon, TruckIcon, ShieldCheckIcon, UserIcon, GavelIcon, ShoppingCart, Zap, Heart } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import CountdownTimer from "./CountdownTimer";
 import BidInput from "./BidInput";
@@ -26,6 +26,12 @@ const ProductDetails = ({ product }) => {
 
     const [mainImage, setMainImage] = useState(product.images?.[0] || '');
     const [quantity, setQuantity] = useState(1);
+
+    useEffect(() => {
+        if (product.images?.[0]) {
+            setMainImage(product.images[0]);
+        }
+    }, [product.images]);
 
     const isInCart = Boolean(cart[productId]);
 
@@ -60,17 +66,34 @@ const ProductDetails = ({ product }) => {
         : 5;
 
     return (
-        <div className="flex max-lg:flex-col gap-12">
-            <div className="flex max-sm:flex-col-reverse gap-3">
+        <div className="flex max-lg:flex-col gap-8 lg:gap-12">
+            <div className="flex max-sm:flex-col-reverse gap-3 shrink-0">
                 <div className="flex sm:flex-col gap-3">
                     {product.images?.map((image, index) => (
-                        <div key={index} onClick={() => setMainImage(product.images[index])} className="bg-slate-100 flex items-center justify-center size-26 rounded-lg group cursor-pointer">
-                            <Image src={image} className="group-hover:scale-103 group-active:scale-95 transition" alt="" width={45} height={45} />
+                        <div 
+                            key={index} 
+                            onClick={() => setMainImage(product.images[index])} 
+                            className={`bg-[#F8FAFC] relative size-20 sm:size-24 rounded-xl border cursor-pointer overflow-hidden p-1 transition ${mainImage === image ? 'border-indigo-600 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                            <Image 
+                                src={image} 
+                                alt="" 
+                                fill 
+                                sizes="96px"
+                                className="object-contain p-1 group-hover:scale-105 transition" 
+                            />
                         </div>
                     ))}
                 </div>
-                <div className="flex justify-center items-center h-100 sm:size-113 bg-slate-100 rounded-lg relative">
-                    <Image src={mainImage} alt="" width={250} height={250} />
+                <div className="flex justify-center items-center h-80 sm:h-112 w-full sm:w-112 bg-[#F8FAFC] border border-slate-200/80 rounded-2xl relative overflow-hidden p-4">
+                    <Image 
+                        src={mainImage || ''} 
+                        alt={product.name || ""} 
+                        fill 
+                        priority
+                        sizes="(max-width: 640px) 100vw, 450px"
+                        className="object-contain p-4 transition-all duration-300" 
+                    />
                 </div>
             </div>
             <div className="flex-1">
