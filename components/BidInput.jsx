@@ -1,19 +1,54 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { useDispatch } from 'react-redux'
-import { placeBid } from '@/lib/features/bid/bidSlice'
-import { updateAuctionBid } from '@/lib/features/product/productSlice'
+import { useUser, useClerk } from '@clerk/nextjs'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { placeBid } from '@/lib/api'
 
 const BidInput = ({ product }) => {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
-    const dispatch = useDispatch()
+    const { user } = useUser()
+    const { openSignIn } = useClerk()
+    const queryClient = useQueryClient()
+
     const minBid = (product.currentBid || product.startingBid || 0) + 100
     const [bidAmount, setBidAmount] = useState(minBid)
     const [showConfirm, setShowConfirm] = useState(false)
 
+    useEffect(() => {
+        setBidAmount((product.currentBid || product.startingBid || 0) + 100)
+    }, [product.currentBid, product.startingBid])
+
+    const mutation = useMutation({
+        mutationFn: placeBid,
+        onSuccess: (newBid) => {
+            queryClient.invalidateQueries({ queryKey: ['listing', product.id] })
+            queryClient.invalidateQueries({ queryKey: ['bids', product.id] })
+            toast.success(`Bid of ${currency}${bidAmount.toLocaleString()} placed!`)
+            setShowConfirm(false)
+            setBidAmount(bidAmount + 100)
+        },
+        onError: (err) => {
+            setShowConfirm(false)
+            if (err.status === 401) {
+                toast.error('Please sign in to place a bid')
+                openSignIn()
+            } else {
+                toast.error(err.message || 'Failed to place bid')
+            }
+        },
+    })
+
     const handlePlaceBid = () => {
+        if (!user) {
+            toast.error('Please sign in to place a bid')
+            openSignIn()
+            return
+        }
+        if (product.sellerId === user.id) {
+            return toast.error('You cannot bid on your own listing')
+        }
         if (bidAmount < minBid) {
             return toast.error(`Minimum bid is ${currency}${minBid.toLocaleString()}`)
         }
@@ -21,20 +56,10 @@ const BidInput = ({ product }) => {
     }
 
     const confirmBid = () => {
-        // Update bid slice
-        dispatch(placeBid({
-            productId: product.id,
+        mutation.mutate({
+            listingId: product.id,
             amount: bidAmount,
-            userName: 'R***m B.',
-        }))
-        // Update product state in Redux
-        dispatch(updateAuctionBid({
-            productId: product.id,
-            amount: bidAmount,
-        }))
-        toast.success(`Bid of ${currency}${bidAmount.toLocaleString()} placed!`)
-        setShowConfirm(false)
-        setBidAmount(bidAmount + 100)
+        })
     }
 
     return (
@@ -55,9 +80,10 @@ const BidInput = ({ product }) => {
                     </div>
                     <button
                         onClick={handlePlaceBid}
-                        className="bg-indigo-600 text-white px-8 py-2.5 text-sm font-medium rounded-md hover:bg-indigo-700 active:scale-95 transition"
+                        disabled={mutation.isPending}
+                        className="bg-indigo-600 disabled:bg-indigo-400 text-white px-8 py-2.5 text-sm font-medium rounded-md hover:bg-indigo-700 active:scale-95 transition"
                     >
-                        Place Bid
+                        {mutation.isPending ? 'Placing...' : 'Place Bid'}
                     </button>
                 </div>
             </div>
@@ -72,8 +98,20 @@ const BidInput = ({ product }) => {
                         </p>
                         <p className="text-xs text-slate-400 mt-2">This action cannot be undone.</p>
                         <div className="flex gap-3 mt-5">
-                            <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-md hover:bg-slate-200 transition">Cancel</button>
-                            <button onClick={confirmBid} className="flex-1 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Confirm Bid</button>
+                            <button 
+                                onClick={() => setShowConfirm(false)} 
+                                disabled={mutation.isPending}
+                                className="flex-1 py-2 bg-slate-100 text-slate-600 rounded-md hover:bg-slate-200 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={confirmBid} 
+                                disabled={mutation.isPending}
+                                className="flex-1 py-2 bg-indigo-600 disabled:bg-indigo-400 text-white rounded-md hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+                            >
+                                {mutation.isPending ? 'Confirming...' : 'Confirm Bid'}
+                            </button>
                         </div>
                     </div>
                 </div>

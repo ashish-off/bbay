@@ -15,7 +15,7 @@ const ProductDetails = ({ product }) => {
 
     const productId = product.id;
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु';
-    const isAuction = product.listingType === 'auction';
+    const isAuction = product.listingType?.toLowerCase() === 'auction';
 
     const cart = useSelector(state => state.cart.cartItems);
     const watchlist = useSelector(state => state.watchlist.items);
@@ -24,7 +24,7 @@ const ProductDetails = ({ product }) => {
     const dispatch = useDispatch();
     const router = useRouter();
 
-    const [mainImage, setMainImage] = useState(product.images[0]);
+    const [mainImage, setMainImage] = useState(product.images?.[0] || '');
     const [quantity, setQuantity] = useState(1);
 
     const isInCart = Boolean(cart[productId]);
@@ -54,8 +54,9 @@ const ProductDetails = ({ product }) => {
         }
     }
 
-    const averageRating = product.rating?.length 
-        ? product.rating.reduce((acc, item) => acc + item.rating, 0) / product.rating.length
+    const reviews = product.ratings || product.rating || [];
+    const averageRating = reviews.length 
+        ? reviews.reduce((acc, item) => acc + item.rating, 0) / reviews.length
         : 5;
 
     return (
@@ -92,7 +93,7 @@ const ProductDetails = ({ product }) => {
                     {Array(5).fill('').map((_, index) => (
                         <StarIcon key={index} size={14} className='text-transparent mt-0.5' fill={averageRating >= index + 1 ? "#00C950" : "#D1D5DB"} />
                     ))}
-                    <p className="text-sm ml-3 text-slate-500">{product.rating?.length || 0} Reviews</p>
+                    <p className="text-sm ml-3 text-slate-500">{reviews.length} Reviews</p>
                 </div>
 
                 {isAuction ? (

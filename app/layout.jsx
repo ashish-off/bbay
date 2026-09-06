@@ -4,6 +4,8 @@ import StoreProvider from "@/app/StoreProvider";
 import "./globals.css";
 import {ClerkProvider} from '@clerk/nextjs'
 
+import QueryProvider from "@/components/QueryProvider";
+
 const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"] });
 
 export const metadata = {
@@ -16,10 +18,12 @@ export default function RootLayout({ children }) {
         <ClerkProvider>
         <html lang="en">
             <body className={`${outfit.className} antialiased`}>
-                <StoreProvider>
-                    <Toaster />
-                    {children}
-                </StoreProvider>
+                <QueryProvider>
+                    <StoreProvider>
+                        <Toaster />
+                        {children}
+                    </StoreProvider>
+                </QueryProvider>
             </body>
         </html>
         </ClerkProvider>

@@ -1,14 +1,29 @@
 'use client'
-import { useSelector } from 'react-redux'
+import { useQuery } from '@tanstack/react-query'
+import { fetchListingBids } from '@/lib/api'
 
 const BidHistory = ({ productId }) => {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
-    const allBids = useSelector(state => state.bid.bidHistory)
-    const bids = allBids.filter(b => b.productId === productId)
+
+    const { data: bids = [], isLoading } = useQuery({
+        queryKey: ['bids', productId],
+        queryFn: () => fetchListingBids(productId),
+        enabled: Boolean(productId),
+    })
+
+    if (isLoading) {
+        return <p className="text-slate-400 text-sm mt-4 animate-pulse">Loading bids...</p>
+    }
 
     if (bids.length === 0) {
         return <p className="text-slate-400 text-sm mt-4">No bids yet. Be the first to bid!</p>
+    }
+
+    const maskName = (name) => {
+        if (!name) return 'Anonymous'
+        if (name.length <= 2) return name
+        return `${name[0]}***${name[name.length - 1]}`
     }
 
     return (
@@ -23,10 +38,16 @@ const BidHistory = ({ productId }) => {
                 </thead>
                 <tbody>
                     {bids.slice(0, 10).map((bid, i) => (
-                        <tr key={bid.id} className={`border-b border-slate-100 ${i === 0 ? 'bid-flash' : ''}`}>
-                            <td className="py-2.5 text-slate-600">{bid.userName}</td>
-                            <td className="py-2.5 font-medium text-slate-800">{currency}{bid.amount.toLocaleString()}</td>
-                            <td className="py-2.5 text-slate-400 text-xs">{new Date(bid.createdAt).toLocaleString()}</td>
+                        <tr key={bid.id} className={`border-b border-slate-100 ${i === 0 ? 'bid-flash bg-indigo-50/40' : ''}`}>
+                            <td className="py-2.5 text-slate-600 font-medium">
+                                {maskName(bid.bidder?.name || bid.userName)}
+                            </td>
+                            <td className="py-2.5 font-semibold text-slate-800">
+                                {currency}{bid.amount?.toLocaleString()}
+                            </td>
+                            <td className="py-2.5 text-slate-400 text-xs">
+                                {new Date(bid.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(bid.createdAt).toLocaleDateString()}
+                            </td>
                         </tr>
                     ))}
                 </tbody>

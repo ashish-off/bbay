@@ -1,14 +1,23 @@
 "use client";
 import { useUser, useClerk, UserButton } from "@clerk/nextjs";
-import { Search, ShoppingCart, Heart, PackageIcon } from "lucide-react";
+import { Search, ShoppingCart, Heart, PackageIcon, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
+import { checkAdminStatus } from "@/lib/api";
 
 const Navbar = () => {
   const { user } = useUser();
   const { openSignIn } = useClerk();
+
+  const { data: adminData } = useQuery({
+    queryKey: ['admin-check'],
+    queryFn: checkAdminStatus,
+    enabled: Boolean(user),
+  });
+  const isAdmin = Boolean(adminData?.isAdmin);
 
   const router = useRouter();
 
@@ -46,6 +55,11 @@ const Navbar = () => {
             <Link href="/orders" className="hover:text-indigo-600 transition">
               Activity
             </Link>
+            {isAdmin && (
+              <Link href="/admin" className="text-xs font-semibold px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full hover:bg-indigo-200 transition">
+                Admin
+              </Link>
+            )}
 
             <form
               onSubmit={handleSearch}
@@ -104,6 +118,13 @@ const Navbar = () => {
                     label="Orders"
                     onClick={() => router.push("/orders")}
                   />
+                  {isAdmin && (
+                    <UserButton.Action
+                      labelIcon={<ShieldCheck size={16} />}
+                      label="Admin Panel"
+                      onClick={() => router.push("/admin")}
+                    />
+                  )}
                 </UserButton.MenuItems>
               </UserButton>
             )}
@@ -138,6 +159,13 @@ const Navbar = () => {
                       label="Watchlist"
                       onClick={() => router.push("/watchlist")}
                     />
+                    {isAdmin && (
+                      <UserButton.Action
+                        labelIcon={<ShieldCheck size={16} />}
+                        label="Admin Panel"
+                        onClick={() => router.push("/admin")}
+                      />
+                    )}
                   </UserButton.MenuItems>
                 </UserButton>
               </div>

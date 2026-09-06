@@ -1,9 +1,11 @@
 'use client'
 import { Suspense, useEffect, useState } from "react"
 import ProductCard from "@/components/ProductCard"
+import Loading from "@/components/Loading"
 import { MoveLeftIcon } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSelector } from "react-redux"
+import { useQuery } from "@tanstack/react-query"
+import { fetchListings } from "@/lib/api"
 
 function ShopContent() {
     const searchParams = useSearchParams()
@@ -21,29 +23,24 @@ function ShopContent() {
         }
     }, [typeParam])
 
-    const products = useSelector(state => state.product.list)
+    const queryType = listingFilter === 'auction' ? 'AUCTION' : listingFilter === 'fixed' ? 'FIXED' : undefined
 
-    const filteredProducts = products.filter(product => {
-        const matchesSearch = search 
-            ? product.name.toLowerCase().includes(search.toLowerCase()) || product.category.toLowerCase().includes(search.toLowerCase())
-            : true;
-        
-        let matchesType = true;
-        if (listingFilter === 'auction') {
-            matchesType = product.listingType === 'auction';
-        } else if (listingFilter === 'fixed') {
-            matchesType = product.listingType === 'fixed' || Boolean(product.buyNowPrice);
-        }
+    const { data, isLoading } = useQuery({
+        queryKey: ['listings', { search, type: queryType }],
+        queryFn: () => fetchListings({
+            search: search || undefined,
+            type: queryType,
+        }),
+    })
 
-        return matchesSearch && matchesType;
-    });
+    const products = data?.listings || []
 
     const handleFilterChange = (type) => {
         setListingFilter(type)
         if (type === 'all') {
-            router.push('/shop')
+            router.push(search ? `/shop?search=${search}` : '/shop')
         } else {
-            router.push(`/shop?type=${type}`)
+            router.push(search ? `/shop?search=${search}&type=${type}` : `/shop?type=${type}`)
         }
     }
 
@@ -53,6 +50,7 @@ function ShopContent() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 my-6">
                     <h1 onClick={() => router.push('/shop')} className="text-2xl text-slate-500 flex items-center gap-2 cursor-pointer">
                         {search && <MoveLeftIcon size={20} />} All <span className="text-slate-700 font-medium">Listings</span>
+                        {search && <span className="text-sm font-normal text-slate-400">for &ldquo;{search}&rdquo;</span>}
                     </h1>
                     
                     {/* Filter buttons */}
@@ -78,15 +76,21 @@ function ShopContent() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:flex flex-wrap gap-6 xl:gap-12 mx-auto mb-32">
-                    {filteredProducts.length > 0 ? (
-                        filteredProducts.map((product) => <ProductCard key={product.id} product={product} />)
-                    ) : (
-                        <div className="py-20 text-center w-full text-slate-400">
-                            No listings match your criteria.
-                        </div>
-                    )}
-                </div>
+                {isLoading ? (
+                    <div className="py-24 flex items-center justify-center">
+                        <Loading />
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 sm:flex flex-wrap gap-6 xl:gap-12 mx-auto mb-32">
+                        {products.length > 0 ? (
+                            products.map((product) => <ProductCard key={product.id} product={product} />)
+                        ) : (
+                            <div className="py-20 text-center w-full text-slate-400">
+                                No listings match your criteria.
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     )

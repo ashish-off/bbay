@@ -4,13 +4,16 @@ import Image from "next/image"
 import { useState } from "react"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
-import { useDispatch } from "react-redux"
-import { addProduct } from "@/lib/features/product/productSlice"
+import { useUser, useClerk } from "@clerk/nextjs"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { createListing } from "@/lib/api"
 
 export default function CreateListing() {
 
     const router = useRouter()
-    const dispatch = useDispatch()
+    const { user, isLoaded } = useUser()
+    const { openSignIn } = useClerk()
+    const queryClient = useQueryClient()
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
 
     const [listingType, setListingType] = useState('auction') // 'auction' | 'fixed'
@@ -25,7 +28,19 @@ export default function CreateListing() {
         duration: "3", // days
         category: "",
     })
-    const [loading, setLoading] = useState(false)
+
+    const mutation = useMutation({
+        mutationFn: createListing,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['seller-listings'] })
+            queryClient.invalidateQueries({ queryKey: ['listings'] })
+            toast.success(`${listingType === 'auction' ? 'Auction' : 'Buy It Now'} listing published successfully!`)
+            router.push('/sell/my-listings')
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Failed to publish listing')
+        },
+    })
 
     const onChangeHandler = (e) => {
         setProductInfo({ ...productInfo, [e.target.name]: e.target.value })
@@ -33,46 +48,39 @@ export default function CreateListing() {
 
     const onSubmitHandler = async (e) => {
         e.preventDefault()
-        setLoading(true)
 
-        const isAuction = listingType === 'auction'
-        const durationDays = Number(productInfo.duration) || 3
-        const auctionEndTime = isAuction 
-            ? new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString()
-            : null
-
-        const startBid = Number(productInfo.startingBid) || 0
-        const buyNow = productInfo.buyNowPrice ? Number(productInfo.buyNowPrice) : null
-
-        const newListing = {
-            id: `prod_${Date.now()}`,
-            name: productInfo.name,
-            description: productInfo.description,
-            mrp: productInfo.mrp ? Number(productInfo.mrp) : (isAuction ? buyNow || startBid * 1.5 : Number(productInfo.price)),
-            price: isAuction ? (buyNow || startBid) : Number(productInfo.price),
-            listingType,
-            currentBid: isAuction ? startBid : null,
-            startingBid: isAuction ? startBid : null,
-            bidCount: 0,
-            buyNowPrice: isAuction ? buyNow : null,
-            auctionEndTime,
-            images: [images[1] ? URL.createObjectURL(images[1]) : assets.product_img1],
-            category: productInfo.category,
-            inStock: true,
-            seller: { id: "user_1", name: "Ram Bahadur", image: assets.gs_logo },
-            rating: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+        if (!user) {
+            toast.error('Please sign in to create a listing')
+            openSignIn()
+            return
         }
 
-        // Store into Redux
-        dispatch(addProduct(newListing))
+        const hasImage = Boolean(images[1] || images[2] || images[3] || images[4])
+        if (!hasImage) {
+            return toast.error('Please add at least 1 image')
+        }
 
-        setTimeout(() => {
-            setLoading(false)
-            toast.success(`${isAuction ? 'Auction' : 'Buy It Now'} listing published successfully!`)
-            router.push('/sell/my-listings')
-        }, 500)
+        const fd = new FormData()
+        if (images[1]) fd.append('image1', images[1])
+        if (images[2]) fd.append('image2', images[2])
+        if (images[3]) fd.append('image3', images[3])
+        if (images[4]) fd.append('image4', images[4])
+
+        fd.append('name', productInfo.name)
+        fd.append('description', productInfo.description)
+        fd.append('category', productInfo.category)
+        fd.append('listingType', listingType.toUpperCase())
+
+        if (listingType === 'auction') {
+            fd.append('startingBid', productInfo.startingBid)
+            if (productInfo.buyNowPrice) fd.append('buyNowPrice', productInfo.buyNowPrice)
+            fd.append('duration', productInfo.duration)
+        } else {
+            fd.append('price', productInfo.price)
+            if (productInfo.mrp) fd.append('mrp', productInfo.mrp)
+        }
+
+        mutation.mutate(fd)
     }
 
     return (
@@ -115,7 +123,7 @@ export default function CreateListing() {
                 </div>
             </div>
             
-            <p className="mt-6 text-sm font-medium text-slate-700">Item Photos</p>
+            <p className="mt-6 text-sm font-medium text-slate-700">Item Photos (first photo is primary)</p>
             <div className="flex gap-3 mt-3">
                 {Object.keys(images).map((key) => (
                     <label key={key} htmlFor={`images${key}`}>
@@ -156,6 +164,7 @@ export default function CreateListing() {
                             onChange={onChangeHandler} 
                             value={productInfo.startingBid} 
                             placeholder="e.g. 1000" 
+                            min="1"
                             className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal" 
                             required 
                         />
@@ -198,6 +207,7 @@ export default function CreateListing() {
                             onChange={onChangeHandler} 
                             value={productInfo.price} 
                             placeholder="e.g. 4500" 
+                            min="1"
                             className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal" 
                             required 
                         />
@@ -216,8 +226,19 @@ export default function CreateListing() {
                 </div>
             )}
 
-            <button disabled={loading} className="bg-indigo-600 text-white px-8 mt-4 py-2.5 hover:bg-indigo-700 rounded-lg transition font-medium text-sm">
-                {loading ? "Publishing..." : (listingType === 'auction' ? "Start Auction" : "List Buy It Now Item")}
+            <button 
+                type="submit"
+                disabled={mutation.isPending} 
+                className="bg-indigo-600 disabled:bg-indigo-400 text-white px-8 mt-4 py-2.5 hover:bg-indigo-700 rounded-lg transition font-medium text-sm flex items-center gap-2"
+            >
+                {mutation.isPending ? (
+                    <>
+                        <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Uploading to ImageKit & Publishing...
+                    </>
+                ) : (
+                    listingType === 'auction' ? "Start Auction" : "List Buy It Now Item"
+                )}
             </button>
         </form>
     )
