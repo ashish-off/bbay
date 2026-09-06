@@ -155,6 +155,9 @@ export async function POST(request) {
         })
 
         return createdOrders
+    }, {
+        maxWait: 10000, // 10s max wait for connection
+        timeout: 30000, // 30s timeout for multi-step transaction across remote Supabase
     })
 
     return Response.json(orders, { status: 201 })
