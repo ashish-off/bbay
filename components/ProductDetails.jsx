@@ -9,6 +9,8 @@ import Image from "next/image";
 import CountdownTimer from "./CountdownTimer";
 import BidInput from "./BidInput";
 import { useDispatch, useSelector } from "react-redux";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { addToCartApi, toggleWatchlistApi, fetchRatings } from "@/lib/api";
 import toast from "react-hot-toast";
 
 const ProductDetails = ({ product }) => {
@@ -23,6 +25,7 @@ const ProductDetails = ({ product }) => {
 
     const dispatch = useDispatch();
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     const [mainImage, setMainImage] = useState(product.images?.[0] || '');
     const [quantity, setQuantity] = useState(1);
@@ -35,32 +38,55 @@ const ProductDetails = ({ product }) => {
 
     const isInCart = Boolean(cart[productId]);
 
-    const addToCartHandler = () => {
+    const addToCartHandler = async () => {
         if (isInCart) {
             router.push('/cart')
             return
         }
         dispatch(addToCart({ productId, quantity }))
-        toast.success(`Added ${quantity} item(s) to cart!`)
+        try {
+            await addToCartApi({ listingId: productId, quantity })
+            queryClient.invalidateQueries({ queryKey: ['cart'] })
+            toast.success(`Added ${quantity} item(s) to cart!`)
+        } catch {
+            toast.success(`Added ${quantity} item(s) to cart!`)
+        }
     }
 
-    const buyNowDirectHandler = () => {
+    const buyNowDirectHandler = async () => {
         if (!isInCart) {
             dispatch(addToCart({ productId, quantity }))
+            try {
+                await addToCartApi({ listingId: productId, quantity })
+                queryClient.invalidateQueries({ queryKey: ['cart'] })
+            } catch {}
         }
         router.push('/cart')
     }
 
-    const handleWatchlistToggle = () => {
+    const handleWatchlistToggle = async () => {
         dispatch(toggleWatchlist({ productId }))
-        if (isWatched) {
-            toast('Removed from watchlist', { icon: '💔' })
-        } else {
-            toast.success('Added to watchlist!')
+        try {
+            const res = await toggleWatchlistApi(productId)
+            queryClient.invalidateQueries({ queryKey: ['watchlist'] })
+            if (res.watched) {
+                toast.success('Added to watchlist!')
+            } else {
+                toast('Removed from watchlist', { icon: '💔' })
+            }
+        } catch {
+            dispatch(toggleWatchlist({ productId }))
+            toast.error('Please sign in to save items to your watchlist')
         }
     }
 
-    const reviews = product.ratings || product.rating || [];
+    const { data: liveRatings = [] } = useQuery({
+        queryKey: ['ratings', productId],
+        queryFn: () => fetchRatings(productId),
+        initialData: product.ratings || [],
+    });
+
+    const reviews = liveRatings.length > 0 ? liveRatings : (product.ratings || product.rating || []);
     const averageRating = reviews.length 
         ? reviews.reduce((acc, item) => acc + item.rating, 0) / reviews.length
         : 5;

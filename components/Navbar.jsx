@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
-import { checkAdminStatus } from "@/lib/api";
+import { checkAdminStatus, fetchCart, fetchWatchlist } from "@/lib/api";
 
 const Navbar = () => {
   const { user } = useUser();
@@ -19,11 +19,31 @@ const Navbar = () => {
   });
   const isAdmin = Boolean(adminData?.isAdmin);
 
+  const { data: cartData } = useQuery({
+    queryKey: ['cart'],
+    queryFn: fetchCart,
+    enabled: Boolean(user),
+  });
+
+  const { data: watchlistData } = useQuery({
+    queryKey: ['watchlist'],
+    queryFn: fetchWatchlist,
+    enabled: Boolean(user),
+  });
+
   const router = useRouter();
 
   const [search, setSearch] = useState("");
-  const cartCount = useSelector((state) => state.cart.total);
-  const watchlistCount = useSelector((state) => state.watchlist.items.length);
+  const reduxCartCount = useSelector((state) => state.cart.total);
+  const reduxWatchlistCount = useSelector((state) => state.watchlist.items.length);
+
+  const cartCount = cartData?.items
+    ? cartData.items.reduce((sum, item) => sum + (item.quantity || 1), 0)
+    : reduxCartCount;
+
+  const watchlistCount = Array.isArray(watchlistData)
+    ? watchlistData.length
+    : reduxWatchlistCount;
 
   const handleSearch = (e) => {
     e.preventDefault();

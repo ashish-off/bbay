@@ -1,22 +1,39 @@
 'use client'
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Loading from "@/components/Loading"
-import { orderDummyData } from "@/assets/assets"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { fetchSellerOrders, updateSellerOrderStatus } from "@/lib/api"
+import { useUser } from "@clerk/nextjs"
+import toast from "react-hot-toast"
+import Image from "next/image"
 
 export default function SellerOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
-    const [orders, setOrders] = useState([])
-    const [loading, setLoading] = useState(true)
+    const { user } = useUser()
+    const queryClient = useQueryClient()
+
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
-    const fetchOrders = async () => {
-       setOrders(orderDummyData)
-       setLoading(false)
-    }
+    const { data: orders = [], isLoading } = useQuery({
+        queryKey: ['seller-orders'],
+        queryFn: fetchSellerOrders,
+        enabled: Boolean(user),
+    })
 
-    const updateOrderStatus = async (orderId, status) => {
-        setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o))
+    const statusMutation = useMutation({
+        mutationFn: updateSellerOrderStatus,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['seller-orders'] })
+            toast.success('Order status updated!')
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Failed to update order status')
+        }
+    })
+
+    const handleUpdateStatus = (orderId, status) => {
+        statusMutation.mutate({ orderId, status })
     }
 
     const openModal = (order) => {
@@ -29,21 +46,20 @@ export default function SellerOrders() {
         setIsModalOpen(false)
     }
 
-    useEffect(() => {
-        fetchOrders()
-    }, [])
-
-    if (loading) return <Loading />
+    if (isLoading) return <Loading />
 
     return (
         <div className="mb-28">
             <h1 className="text-2xl text-slate-500 mb-5">Sales & <span className="text-slate-800 font-medium">Orders</span></h1>
             {orders.length === 0 ? (
-                <p className="text-slate-400">No orders received yet.</p>
+                <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-slate-600 font-medium">No sales orders yet</p>
+                    <p className="text-xs text-slate-400 mt-1">When buyers order your items, they will appear here for fulfillment.</p>
+                </div>
             ) : (
-                <div className="overflow-x-auto max-w-5xl rounded-lg border border-slate-200 bg-white">
+                <div className="overflow-x-auto max-w-5xl rounded-xl border border-slate-200 bg-white shadow-2xs">
                     <table className="w-full text-sm text-left text-slate-600">
-                        <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider border-b border-slate-200">
+                        <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
                             <tr>
                                 {["No.", "Buyer", "Amount", "Payment", "Status", "Date"].map((heading, i) => (
                                     <th key={i} className="px-4 py-3">{heading}</th>
@@ -57,17 +73,18 @@ export default function SellerOrders() {
                                     className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                                     onClick={() => openModal(order)}
                                 >
-                                    <td className="px-4 py-3 font-medium text-indigo-600">
-                                        {index + 1}
+                                    <td className="px-4 py-3 font-semibold text-indigo-600">
+                                        #{index + 1}
                                     </td>
-                                    <td className="px-4 py-3 font-medium text-slate-800">{order.user?.name}</td>
-                                    <td className="px-4 py-3 font-medium text-slate-800">{currency}{order.total.toLocaleString()}</td>
+                                    <td className="px-4 py-3 font-medium text-slate-800">{order.user?.name || 'Buyer'}</td>
+                                    <td className="px-4 py-3 font-semibold text-slate-800">{currency}{order.total.toLocaleString()}</td>
                                     <td className="px-4 py-3 text-xs">{order.paymentMethod}</td>
                                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                         <select
                                             value={order.status}
-                                            onChange={e => updateOrderStatus(order.id, e.target.value)}
-                                            className="border border-slate-200 rounded-md text-xs p-1 outline-none focus:ring-1 focus:ring-indigo-300"
+                                            onChange={e => handleUpdateStatus(order.id, e.target.value)}
+                                            disabled={statusMutation.isPending}
+                                            className="border border-slate-200 bg-white rounded-lg text-xs p-1.5 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium"
                                         >
                                             <option value="ORDER_PLACED">ORDER_PLACED</option>
                                             <option value="PROCESSING">PROCESSING</option>
@@ -88,45 +105,53 @@ export default function SellerOrders() {
             {/* Modal */}
             {isModalOpen && selectedOrder && (
                 <div onClick={closeModal} className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-xs text-slate-700 text-sm z-50 p-4" >
-                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 relative">
-                        <h2 className="text-lg font-semibold text-slate-900 mb-4">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative animate-in fade-in zoom-in-95 duration-200">
+                        <h2 className="text-lg font-bold text-slate-900 mb-4">
                             Order Details
                         </h2>
 
                         {/* Customer Details */}
-                        <div className="mb-4 text-xs space-y-1">
+                        <div className="mb-4 text-xs space-y-1 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
                             <h3 className="font-semibold text-sm text-slate-800 mb-2">Buyer Information</h3>
                             <p><span className="text-slate-500">Name:</span> {selectedOrder.user?.name}</p>
+                            <p><span className="text-slate-500">Email:</span> {selectedOrder.user?.email}</p>
                             <p><span className="text-slate-500">Phone:</span> {selectedOrder.address?.phone}</p>
-                            <p><span className="text-slate-500">Address:</span> {`${selectedOrder.address?.street}, ${selectedOrder.address?.city}, ${selectedOrder.address?.country}`}</p>
+                            <p><span className="text-slate-500">Delivery Address:</span> {`${selectedOrder.address?.street}, ${selectedOrder.address?.city}, ${selectedOrder.address?.country}`}</p>
                         </div>
 
                         {/* Products */}
                         <div className="mb-4">
-                            <h3 className="font-semibold text-sm text-slate-800 mb-2">Items</h3>
+                            <h3 className="font-semibold text-sm text-slate-800 mb-2">Items to Fulfill</h3>
                             <div className="space-y-2">
-                                {selectedOrder.orderItems.map((item, i) => (
-                                    <div key={i} className="flex items-center gap-3 border border-slate-100 rounded-lg p-2 bg-slate-50/50">
-                                        <img
-                                            src={item.product?.images?.[0]?.src || item.product?.images?.[0] || ''}
-                                            alt={item.product?.name}
-                                            className="w-12 h-12 object-cover rounded"
-                                        />
-                                        <div className="flex-1 text-xs">
-                                            <p className="font-medium text-slate-800">{item.product?.name}</p>
-                                            <p className="text-slate-400">Qty: {item.quantity} · {currency}{item.price.toLocaleString()}</p>
+                                {selectedOrder.orderItems.map((item, i) => {
+                                    const product = item.listing || item.product || {};
+                                    return (
+                                        <div key={i} className="flex items-center gap-3 border border-slate-200/80 rounded-xl p-2.5 bg-white">
+                                            <div className="size-12 rounded-lg bg-slate-100 relative overflow-hidden shrink-0">
+                                                <Image
+                                                    src={product.images?.[0] || '/placeholder.png'}
+                                                    alt={product.name || 'Item'}
+                                                    fill
+                                                    sizes="48px"
+                                                    className="object-contain p-1"
+                                                />
+                                            </div>
+                                            <div className="flex-1 text-xs">
+                                                <p className="font-semibold text-slate-800">{product.name || 'Listing Item'}</p>
+                                                <p className="text-slate-400 mt-0.5">Qty: {item.quantity} · {currency}{item.price.toLocaleString()}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                        <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                             <div>
                                 <p className="text-xs text-slate-400">Total Amount</p>
-                                <p className="text-base font-bold text-slate-800">{currency}{selectedOrder.total.toLocaleString()}</p>
+                                <p className="text-base font-bold text-indigo-600">{currency}{selectedOrder.total.toLocaleString()}</p>
                             </div>
-                            <button onClick={closeModal} className="px-4 py-1.5 bg-slate-100 text-xs font-medium text-slate-600 rounded-lg hover:bg-slate-200" >
+                            <button onClick={closeModal} className="px-4 py-2 bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer transition" >
                                 Close
                             </button>
                         </div>

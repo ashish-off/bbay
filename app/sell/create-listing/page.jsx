@@ -1,23 +1,26 @@
 'use client'
-import { assets, categories } from "@/assets/assets"
+import { categories } from "@/assets/assets"
 import Image from "next/image"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { createListing } from "@/lib/api"
+import { X, Upload, Plus, Image as ImageIcon } from "lucide-react"
 
 export default function CreateListing() {
-
     const router = useRouter()
-    const { user, isLoaded } = useUser()
+    const { user } = useUser()
     const { openSignIn } = useClerk()
     const queryClient = useQueryClient()
+    const fileInputRef = useRef(null)
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
 
     const [listingType, setListingType] = useState('auction') // 'auction' | 'fixed'
-    const [images, setImages] = useState({ 1: null, 2: null, 3: null, 4: null })
+    // Array of files: [{ id: string, file: File, previewUrl: string }]
+    const [selectedImages, setSelectedImages] = useState([])
+
     const [productInfo, setProductInfo] = useState({
         name: "",
         description: "",
@@ -25,7 +28,7 @@ export default function CreateListing() {
         price: "",
         startingBid: "",
         buyNowPrice: "",
-        duration: "3", // days
+        duration: "3d", // default 3 days
         category: "",
     })
 
@@ -46,6 +49,46 @@ export default function CreateListing() {
         setProductInfo({ ...productInfo, [e.target.name]: e.target.value })
     }
 
+    // Handle multi-image file pick (allows selecting multiple images at once)
+    const handleFilesSelect = (e) => {
+        const files = Array.from(e.target.files || [])
+        if (!files.length) return
+
+        const maxTotal = 6
+        const remainingSlots = maxTotal - selectedImages.length
+
+        if (remainingSlots <= 0) {
+            toast.error(`Maximum of ${maxTotal} photos allowed`)
+            return
+        }
+
+        const allowedFiles = files.slice(0, remainingSlots)
+        if (files.length > remainingSlots) {
+            toast(`Added first ${remainingSlots} photos (max ${maxTotal})`, { icon: 'ℹ️' })
+        }
+
+        const newEntries = allowedFiles.map(file => ({
+            id: `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+        }))
+
+        setSelectedImages(prev => [...prev, ...newEntries])
+        // Reset input value so user can re-select if needed
+        if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+
+    // Undo / remove specific image
+    const handleRemoveImage = (idToRemove) => {
+        setSelectedImages(prev => {
+            const item = prev.find(img => img.id === idToRemove)
+            if (item?.previewUrl) {
+                URL.revokeObjectURL(item.previewUrl)
+            }
+            return prev.filter(img => img.id !== idToRemove)
+        })
+    }
+
     const onSubmitHandler = async (e) => {
         e.preventDefault()
 
@@ -55,16 +98,14 @@ export default function CreateListing() {
             return
         }
 
-        const hasImage = Boolean(images[1] || images[2] || images[3] || images[4])
-        if (!hasImage) {
+        if (selectedImages.length === 0) {
             return toast.error('Please add at least 1 image')
         }
 
         const fd = new FormData()
-        if (images[1]) fd.append('image1', images[1])
-        if (images[2]) fd.append('image2', images[2])
-        if (images[3]) fd.append('image3', images[3])
-        if (images[4]) fd.append('image4', images[4])
+        selectedImages.forEach(img => {
+            fd.append('images', img.file)
+        })
 
         fd.append('name', productInfo.name)
         fd.append('description', productInfo.description)
@@ -102,7 +143,7 @@ export default function CreateListing() {
                             className="accent-indigo-600" 
                         />
                         <div>
-                            <p className="text-sm font-semibold">🔨 Auction</p>
+                            <p className="text-sm font-semibold">🔨 Live Auction</p>
                             <p className="text-[11px] text-slate-500 font-normal">Buyers bid against each other</p>
                         </div>
                     </label>
@@ -123,14 +164,70 @@ export default function CreateListing() {
                 </div>
             </div>
             
-            <p className="mt-6 text-sm font-medium text-slate-700">Item Photos (first photo is primary)</p>
-            <div className="flex gap-3 mt-3">
-                {Object.keys(images).map((key) => (
-                    <label key={key} htmlFor={`images${key}`}>
-                        <Image width={300} height={300} className='h-16 w-16 object-cover border border-slate-200 rounded-lg cursor-pointer hover:border-slate-400 transition' src={images[key] ? URL.createObjectURL(images[key]) : assets.upload_area} alt="" />
-                        <input type="file" accept='image/*' id={`images${key}`} onChange={e => setImages({ ...images, [key]: e.target.files[0] })} hidden />
-                    </label>
-                ))}
+            {/* Multi-Image Upload Area */}
+            <div className="mt-6">
+                <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-slate-700">
+                        Item Photos <span className="text-xs text-slate-400 font-normal">(Up to 6 photos, any size/ratio. First is primary)</span>
+                    </p>
+                    <span className="text-xs text-indigo-600 font-medium">{selectedImages.length}/6 selected</span>
+                </div>
+
+                {/* Hidden input supporting multi-selection */}
+                <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={handleFilesSelect} 
+                    className="hidden" 
+                    id="multi-image-input" 
+                />
+
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mt-2">
+                    {selectedImages.map((item, idx) => (
+                        <div key={item.id} className="relative group aspect-square rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs">
+                            <Image 
+                                src={item.previewUrl} 
+                                alt={`Item image ${idx + 1}`} 
+                                fill 
+                                unoptimized
+                                className="object-cover transition-transform duration-200 group-hover:scale-105" 
+                            />
+                            {/* Primary badge for first photo */}
+                            {idx === 0 && (
+                                <span className="absolute bottom-1 left-1 bg-indigo-600/90 text-[10px] text-white font-medium px-1.5 py-0.5 rounded shadow-xs pointer-events-none">
+                                    Primary
+                                </span>
+                            )}
+                            {/* Top-right cross undo button */}
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveImage(item.id)
+                                }}
+                                title="Remove photo"
+                                className="absolute top-1 right-1 size-6 rounded-full bg-slate-900/80 hover:bg-red-600 text-white flex items-center justify-center transition shadow-md"
+                            >
+                                <X className="size-3.5 stroke-[2.5]" />
+                            </button>
+                        </div>
+                    ))}
+
+                    {/* Add more button if less than 6 */}
+                    {selectedImages.length < 6 && (
+                        <label 
+                            htmlFor="multi-image-input" 
+                            className="aspect-square rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-500 bg-slate-50 hover:bg-indigo-50/40 cursor-pointer flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-indigo-600 transition group"
+                        >
+                            <div className="size-8 rounded-full bg-white group-hover:bg-indigo-100 flex items-center justify-center shadow-xs transition">
+                                <Plus className="size-4 text-slate-500 group-hover:text-indigo-600" />
+                            </div>
+                            <span className="text-[11px] font-medium">Add Photos</span>
+                        </label>
+                    )}
+                </div>
             </div>
 
             <label className="flex flex-col gap-1.5 my-5 text-sm font-medium text-slate-700">
@@ -188,11 +285,16 @@ export default function CreateListing() {
                             onChange={onChangeHandler} 
                             className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal"
                         >
-                            <option value="1">1 Day</option>
-                            <option value="3">3 Days</option>
-                            <option value="5">5 Days</option>
-                            <option value="7">7 Days</option>
-                            <option value="10">10 Days</option>
+                            <option value="1h">1 Hour (Flash Auction)</option>
+                            <option value="6h">6 Hours</option>
+                            <option value="12h">12 Hours</option>
+                            <option value="1d">1 Day</option>
+                            <option value="2d">2 Days</option>
+                            <option value="3d">3 Days (Recommended)</option>
+                            <option value="5d">5 Days</option>
+                            <option value="7d">7 Days (1 Week)</option>
+                            <option value="10d">10 Days</option>
+                            <option value="14d">14 Days (2 Weeks)</option>
                         </select>
                     </label>
                 </div>
@@ -229,12 +331,12 @@ export default function CreateListing() {
             <button 
                 type="submit"
                 disabled={mutation.isPending} 
-                className="bg-indigo-600 disabled:bg-indigo-400 text-white px-8 mt-4 py-2.5 hover:bg-indigo-700 rounded-lg transition font-medium text-sm flex items-center gap-2"
+                className="bg-indigo-600 disabled:bg-indigo-400 text-white px-8 mt-4 py-2.5 hover:bg-indigo-700 rounded-lg transition font-medium text-sm flex items-center gap-2 cursor-pointer shadow-xs"
             >
                 {mutation.isPending ? (
                     <>
                         <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        Uploading...
+                        Uploading Listing...
                     </>
                 ) : (
                     listingType === 'auction' ? "Start Auction" : "List Buy It Now Item"

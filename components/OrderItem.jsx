@@ -18,30 +18,43 @@ const OrderItem = ({ order }) => {
             <tr className="text-sm">
                 <td className="text-left">
                     <div className="flex flex-col gap-6">
-                        {order.orderItems.map((item, index) => (
-                            <div key={index} className="flex items-center gap-4">
-                                <div className="w-20 aspect-square bg-slate-100 flex items-center justify-center rounded-md">
-                                    <Image
-                                        className="h-14 w-auto"
-                                        src={item.product?.images?.[0] || ''}
-                                        alt="product_img"
-                                        width={50}
-                                        height={50}
-                                    />
+                        {order.orderItems.map((item, index) => {
+                            const product = item.listing || item.product || {};
+                            const prodId = product.id || item.listingId;
+                            const hasRating = ratings.find(r => order.id === r.orderId && prodId === (r.listingId || r.productId));
+
+                            return (
+                                <div key={index} className="flex items-center gap-4">
+                                    <div className="size-20 aspect-square bg-slate-100 flex items-center justify-center rounded-xl overflow-hidden border border-slate-200/80 relative shrink-0">
+                                        <Image
+                                            className="object-contain p-1.5"
+                                            src={product.images?.[0] || '/placeholder.png'}
+                                            alt={product.name || "Item"}
+                                            fill
+                                            sizes="80px"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col justify-center text-sm">
+                                        <p className="font-semibold text-slate-800 text-base">{product.name || 'Order Item'}</p>
+                                        <p className="text-slate-500 text-xs mt-0.5">{currency}{item.price.toLocaleString()} × Qty: {item.quantity}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{new Date(order.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                                        <div className="mt-1">
+                                            {hasRating ? (
+                                                <Rating value={hasRating.rating} />
+                                            ) : (
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setRatingModal({ orderId: order.id, productId: prodId })} 
+                                                    className="text-indigo-600 text-xs font-medium hover:underline transition cursor-pointer"
+                                                >
+                                                    Rate Item ★
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col justify-center text-sm">
-                                    <p className="font-medium text-slate-700 text-base">{item.product?.name}</p>
-                                    <p>{currency}{item.price.toLocaleString()} Qty : {item.quantity} </p>
-                                    <p className="text-xs text-slate-400 mt-1">{new Date(order.createdAt).toDateString()}</p>
-                                    <div>
-                                        {ratings.find(rating => order.id === rating.orderId && item.product?.id === rating.productId)
-                                            ? <Rating value={ratings.find(rating => order.id === rating.orderId && item.product?.id === rating.productId).rating} />
-                                            : <button onClick={() => setRatingModal({ orderId: order.id, productId: item.product?.id })} className={`text-indigo-600 text-xs mt-1 hover:underline transition ${order.status !== "DELIVERED" && 'hidden'}`}>Rate Item</button>
-                                        }</div>
-                                    {ratingModal && <RatingModal ratingModal={ratingModal} setRatingModal={setRatingModal} />}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </td>
 

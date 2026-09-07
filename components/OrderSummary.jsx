@@ -1,118 +1,254 @@
-import { PlusIcon, SquarePenIcon, XIcon } from 'lucide-react';
+'use client'
+import { PlusIcon, SquarePenIcon, XIcon, CheckCircle2 } from 'lucide-react';
 import React, { useState } from 'react'
 import AddressModal from './AddressModal';
-import { useSelector } from 'react-redux';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchAddresses, validateCouponApi, createOrderApi } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { useUser, useClerk } from '@clerk/nextjs';
 
 const OrderSummary = ({ totalPrice, items }) => {
-
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु';
-
     const router = useRouter();
-
-    const addressList = useSelector(state => state.address.list);
+    const { user } = useUser();
+    const { openSignIn } = useClerk();
+    const queryClient = useQueryClient();
 
     const [paymentMethod, setPaymentMethod] = useState('COD');
-    const [selectedAddress, setSelectedAddress] = useState(null);
+    const [selectedAddressId, setSelectedAddressId] = useState('');
     const [showAddressModal, setShowAddressModal] = useState(false);
     const [couponCodeInput, setCouponCodeInput] = useState('');
-    const [coupon, setCoupon] = useState('');
+    const [coupon, setCoupon] = useState(null);
+    const [isCheckingCoupon, setIsCheckingCoupon] = useState(false);
+
+    const { data: addresses = [] } = useQuery({
+        queryKey: ['addresses'],
+        queryFn: fetchAddresses,
+        enabled: Boolean(user),
+    });
+
+    // Auto-select first address if none chosen
+    const activeAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0] || null;
+
+    const orderMutation = useMutation({
+        mutationFn: createOrderApi,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['cart'] });
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            toast.success('Order placed successfully!');
+            router.push('/orders');
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Failed to place order');
+        }
+    });
 
     const handleCouponCode = async (event) => {
         event.preventDefault();
-        if (couponCodeInput.toUpperCase() === 'NEW20') {
-            setCoupon({ code: 'NEW20', discount: 20, description: '20% off for new user' })
-            toast.success('Coupon Applied!')
-        } else {
-            toast.error('Invalid coupon code')
+        const code = couponCodeInput.trim().toUpperCase();
+        if (!code) return;
+
+        setIsCheckingCoupon(true);
+        try {
+            const res = await validateCouponApi(code);
+            setCoupon(res);
+            toast.success(`Coupon ${res.code} applied! (${res.discount}% off)`);
+            setCouponCodeInput('');
+        } catch (err) {
+            toast.error(err.message || 'Invalid coupon code');
+        } finally {
+            setIsCheckingCoupon(false);
         }
-    }
+    };
 
     const handlePlaceOrder = async (e) => {
         e.preventDefault();
-        if (!selectedAddress && addressList.length === 0) {
-            return toast.error('Please add a delivery address first');
+
+        if (!user) {
+            toast.error('Please sign in to place an order');
+            openSignIn();
+            return;
         }
-        router.push('/orders')
-    }
+
+        if (!activeAddress) {
+            toast.error('Please select or add a delivery address first');
+            setShowAddressModal(true);
+            return;
+        }
+
+        orderMutation.mutate({
+            addressId: activeAddress.id,
+            paymentMethod,
+            couponCode: coupon?.code || null,
+        });
+    };
+
+    const discountAmount = coupon ? Math.round((coupon.discount / 100) * totalPrice) : 0;
+    const finalTotal = Math.max(0, totalPrice - discountAmount);
 
     return (
-        <div className='w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7'>
-            <h2 className='text-xl font-medium text-slate-600'>Payment Summary</h2>
-            <p className='text-slate-400 text-xs my-4'>Payment Method</p>
-            <div className='flex gap-2 items-center'>
-                <input type="radio" id="COD" name='payment' onChange={() => setPaymentMethod('COD')} checked={paymentMethod === 'COD'} className='accent-indigo-600' />
-                <label htmlFor="COD" className='cursor-pointer'>Cash on Delivery (COD)</label>
+        <div className='w-full max-w-lg lg:max-w-[340px] bg-white border border-slate-200 text-slate-500 text-sm rounded-2xl p-6 shadow-xs'>
+            <h2 className='text-lg font-bold text-slate-800'>Payment Summary</h2>
+            
+            <p className='text-slate-400 text-xs mt-4 mb-2 uppercase tracking-wider font-semibold'>Payment Method</p>
+            <div className='space-y-2'>
+                <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition ${paymentMethod === 'COD' ? 'border-indigo-600 bg-indigo-50/40 text-slate-800' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input 
+                        type="radio" 
+                        id="COD" 
+                        name='payment' 
+                        onChange={() => setPaymentMethod('COD')} 
+                        checked={paymentMethod === 'COD'} 
+                        className='accent-indigo-600' 
+                    />
+                    <span className='text-xs font-medium'>Cash on Delivery (COD)</span>
+                </label>
+                <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition ${paymentMethod === 'ESEWA' ? 'border-green-600 bg-green-50/40 text-green-900' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input 
+                        type="radio" 
+                        id="ESEWA" 
+                        name='payment' 
+                        onChange={() => setPaymentMethod('ESEWA')} 
+                        checked={paymentMethod === 'ESEWA'} 
+                        className='accent-green-600' 
+                    />
+                    <span className='text-xs font-semibold text-green-700'>eSewa / Khalti</span>
+                </label>
             </div>
-            <div className='flex gap-2 items-center mt-2'>
-                <input type="radio" id="ESEWA" name='payment' onChange={() => setPaymentMethod('ESEWA')} checked={paymentMethod === 'ESEWA'} className='accent-indigo-600' />
-                <label htmlFor="ESEWA" className='cursor-pointer font-medium text-green-700'>eSewa / Khalti</label>
-            </div>
-            <div className='my-4 py-4 border-y border-slate-200 text-slate-400'>
-                <p>Delivery Address</p>
-                {
-                    selectedAddress ? (
-                        <div className='flex gap-2 items-center mt-2 text-slate-700'>
-                            <p className='text-xs'>{selectedAddress.name}, {selectedAddress.street}, {selectedAddress.city}</p>
-                            <SquarePenIcon onClick={() => setSelectedAddress(null)} className='cursor-pointer text-slate-400 hover:text-slate-600' size={16} />
-                        </div>
-                    ) : (
-                        <div>
-                            {
-                                addressList.length > 0 && (
-                                    <select className='border border-slate-300 p-2 w-full my-3 outline-none rounded text-xs text-slate-600' onChange={(e) => setSelectedAddress(addressList[e.target.value])} >
-                                        <option value="">Select Address</option>
-                                        {
-                                            addressList.map((address, index) => (
-                                                <option key={index} value={index}>{address.name}, {address.city}, {address.street}</option>
-                                            ))
-                                        }
-                                    </select>
-                                )
-                            }
-                            <button className='flex items-center gap-1 text-indigo-600 font-medium mt-1 text-xs' onClick={() => setShowAddressModal(true)} >Add Address <PlusIcon size={14} /></button>
-                        </div>
-                    )
-                }
-            </div>
-            <div className='pb-4 border-b border-slate-200'>
-                <div className='flex justify-between'>
-                    <div className='flex flex-col gap-1 text-slate-400'>
-                        <p>Subtotal:</p>
-                        <p>Shipping:</p>
-                        {coupon && <p>Coupon:</p>}
-                    </div>
-                    <div className='flex flex-col gap-1 font-medium text-right'>
-                        <p>{currency}{totalPrice.toLocaleString()}</p>
-                        <p className='text-green-600'>Free</p>
-                        {coupon && <p className='text-red-500'>{`-${currency}${(coupon.discount / 100 * totalPrice).toFixed(0)}`}</p>}
-                    </div>
+
+            {/* Delivery Address Section */}
+            <div className='my-4 py-4 border-y border-slate-200 text-slate-600'>
+                <div className="flex items-center justify-between mb-2">
+                    <p className='text-xs text-slate-400 uppercase tracking-wider font-semibold'>Delivery Address</p>
+                    {addresses.length > 0 && (
+                        <button 
+                            type="button" 
+                            onClick={() => setShowAddressModal(true)} 
+                            className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-0.5"
+                        >
+                            <PlusIcon size={13} /> Add
+                        </button>
+                    )}
                 </div>
-                {
-                    !coupon ? (
-                        <form onSubmit={e => toast.promise(handleCouponCode(e), { loading: 'Checking Coupon...' })} className='flex justify-center gap-2 mt-3'>
-                            <input onChange={(e) => setCouponCodeInput(e.target.value)} value={couponCodeInput} type="text" placeholder='Coupon Code' className='border border-slate-300 p-1.5 rounded w-full outline-none text-xs' />
-                            <button className='bg-slate-700 text-white px-3 rounded hover:bg-slate-800 text-xs active:scale-95 transition-all'>Apply</button>
-                        </form>
-                    ) : (
-                        <div className='w-full flex items-center justify-between text-xs mt-2 bg-green-50 text-green-700 p-1.5 rounded border border-green-200'>
-                            <p>Code: <span className='font-semibold'>{coupon.code.toUpperCase()}</span> ({coupon.discount}%)</p>
-                            <XIcon size={16} onClick={() => setCoupon('')} className='hover:text-red-700 transition cursor-pointer' />
+
+                {activeAddress ? (
+                    <div className='bg-slate-50 p-3 rounded-xl border border-slate-200/80'>
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <p className='text-xs font-semibold text-slate-800'>{activeAddress.name}</p>
+                                <p className='text-xs text-slate-500 mt-0.5'>{activeAddress.street}, {activeAddress.city}</p>
+                                <p className='text-[11px] text-slate-400'>{activeAddress.phone}</p>
+                            </div>
                         </div>
-                    )
-                }
+
+                        {addresses.length > 1 && (
+                            <select 
+                                className='border border-slate-200 bg-white p-1.5 w-full mt-2.5 outline-none rounded-md text-xs text-slate-700' 
+                                value={activeAddress.id}
+                                onChange={(e) => setSelectedAddressId(e.target.value)}
+                            >
+                                {addresses.map((addr) => (
+                                    <option key={addr.id} value={addr.id}>
+                                        {addr.name} — {addr.city} ({addr.street})
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-center py-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <p className="text-xs text-slate-400 mb-2">No delivery address saved</p>
+                        <button 
+                            type="button" 
+                            className='inline-flex items-center gap-1 bg-indigo-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition cursor-pointer' 
+                            onClick={() => setShowAddressModal(true)}
+                        >
+                            Add Address <PlusIcon size={13} />
+                        </button>
+                    </div>
+                )}
             </div>
+
+            {/* Price Calculations & Coupon */}
+            <div className='pb-4 border-b border-slate-200 space-y-2'>
+                <div className='flex justify-between text-xs'>
+                    <span className='text-slate-500'>Subtotal</span>
+                    <span className='font-semibold text-slate-800'>{currency}{totalPrice.toLocaleString()}</span>
+                </div>
+                <div className='flex justify-between text-xs'>
+                    <span className='text-slate-500'>Delivery Fee</span>
+                    <span className='font-semibold text-emerald-600'>Free</span>
+                </div>
+                {coupon && (
+                    <div className='flex justify-between text-xs text-emerald-600'>
+                        <span>Discount ({coupon.discount}%)</span>
+                        <span className='font-semibold'>-{currency}{discountAmount.toLocaleString()}</span>
+                    </div>
+                )}
+
+                {/* Coupon Input or Active Coupon Chip */}
+                {!coupon ? (
+                    <form onSubmit={handleCouponCode} className='flex gap-2 pt-2'>
+                        <input 
+                            onChange={(e) => setCouponCodeInput(e.target.value)} 
+                            value={couponCodeInput} 
+                            type="text" 
+                            placeholder='Coupon code' 
+                            className='border border-slate-200 p-2 rounded-lg w-full outline-none text-xs uppercase focus:border-indigo-500' 
+                        />
+                        <button 
+                            type="submit" 
+                            disabled={isCheckingCoupon || !couponCodeInput.trim()}
+                            className='bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white px-3.5 rounded-lg text-xs font-medium active:scale-95 transition cursor-pointer'
+                        >
+                            {isCheckingCoupon ? '...' : 'Apply'}
+                        </button>
+                    </form>
+                ) : (
+                    <div className='w-full flex items-center justify-between text-xs bg-emerald-50 text-emerald-700 p-2 rounded-lg border border-emerald-200 mt-2'>
+                        <div className="flex items-center gap-1.5">
+                            <CheckCircle2 size={14} />
+                            <span>Code: <strong>{coupon.code}</strong> (-{coupon.discount}%)</span>
+                        </div>
+                        <button type="button" onClick={() => setCoupon(null)} className="hover:text-red-600 transition cursor-pointer">
+                            <XIcon size={14} />
+                        </button>
+                    </div>
+                )}
+            </div>
+
             <div className='flex justify-between py-4 text-base'>
                 <p className='font-semibold text-slate-700'>Total:</p>
-                <p className='font-bold text-right text-slate-800'>{currency}{coupon ? (totalPrice - (coupon.discount / 100 * totalPrice)).toFixed(0) : totalPrice.toLocaleString()}</p>
+                <p className='font-bold text-right text-indigo-600 text-lg'>
+                    {currency}{finalTotal.toLocaleString()}
+                </p>
             </div>
-            <button onClick={e => toast.promise(handlePlaceOrder(e), { loading: 'Placing Order...' })} className='w-full bg-indigo-600 text-white py-2.5 rounded hover:bg-indigo-700 active:scale-95 transition-all font-medium'>Place Order</button>
 
-            {showAddressModal && <AddressModal setShowAddressModal={setShowAddressModal} />}
+            <button 
+                type="button" 
+                onClick={handlePlaceOrder} 
+                disabled={orderMutation.isPending || items.length === 0}
+                className='w-full bg-indigo-600 disabled:bg-indigo-300 text-white py-3 rounded-xl hover:bg-indigo-700 active:scale-95 transition font-semibold text-sm cursor-pointer shadow-xs flex items-center justify-center gap-2'
+            >
+                {orderMutation.isPending ? (
+                    <>
+                        <span className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        Processing Order...
+                    </>
+                ) : (
+                    "Place Order"
+                )}
+            </button>
 
+            {showAddressModal && (
+                <AddressModal 
+                    setShowAddressModal={setShowAddressModal} 
+                    onAddressAdded={(newAddr) => setSelectedAddressId(newAddr.id)} 
+                />
+            )}
         </div>
-    )
-}
+    );
+};
 
-export default OrderSummary
+export default OrderSummary;

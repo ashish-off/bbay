@@ -6,6 +6,8 @@ import React from 'react'
 import CountdownTimer from './CountdownTimer'
 import { useDispatch, useSelector } from 'react-redux'
 import { toggleWatchlist } from '@/lib/features/watchlist/watchlistSlice'
+import { useQueryClient } from '@tanstack/react-query'
+import { toggleWatchlistApi } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { assets } from '@/assets/assets'
 
@@ -23,14 +25,25 @@ const ProductCard = ({ product }) => {
 
     const isAuction = product.listingType?.toLowerCase() === 'auction'
 
-    const handleWatchlistClick = (e) => {
+    const queryClient = useQueryClient()
+
+    const handleWatchlistClick = async (e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Optimistic Redux toggle
         dispatch(toggleWatchlist({ productId: product.id }))
-        if (isWatched) {
-            toast('Removed from watchlist', { icon: '💔' })
-        } else {
-            toast.success('Added to watchlist!')
+        try {
+            const res = await toggleWatchlistApi(product.id)
+            queryClient.invalidateQueries({ queryKey: ['watchlist'] })
+            if (res.watched) {
+                toast.success('Added to watchlist!')
+            } else {
+                toast('Removed from watchlist', { icon: '💔' })
+            }
+        } catch {
+            // Revert on error
+            dispatch(toggleWatchlist({ productId: product.id }))
+            toast.error('Please sign in to save items to your watchlist')
         }
     }
 
