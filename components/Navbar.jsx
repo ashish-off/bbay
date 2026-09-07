@@ -3,14 +3,16 @@ import { useUser, useClerk, UserButton } from "@clerk/nextjs";
 import { Search, ShoppingCart, Heart, PackageIcon, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useSelector } from "react-redux";
+import { useState, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import { checkAdminStatus, fetchCart, fetchWatchlist } from "@/lib/api";
+import { setWatchlist } from "@/lib/features/watchlist/watchlistSlice";
 
 const Navbar = () => {
   const { user } = useUser();
   const { openSignIn } = useClerk();
+  const dispatch = useDispatch();
 
   const { data: adminData } = useQuery({
     queryKey: ['admin-check'],
@@ -30,6 +32,14 @@ const Navbar = () => {
     queryFn: fetchWatchlist,
     enabled: Boolean(user),
   });
+
+  // Sync DB watchlist to Redux so all ProductCards and ProductDetails have red hearts
+  useEffect(() => {
+    if (Array.isArray(watchlistData)) {
+      const ids = watchlistData.map(item => item.id).filter(Boolean);
+      dispatch(setWatchlist(ids));
+    }
+  }, [watchlistData, dispatch]);
 
   const router = useRouter();
 
@@ -135,7 +145,7 @@ const Navbar = () => {
                 <UserButton.MenuItems>
                   <UserButton.Action
                     labelIcon={<PackageIcon size={16} />}
-                    label="Orders"
+                    label="Order Activity"
                     onClick={() => router.push("/orders")}
                   />
                   {isAdmin && (
@@ -160,24 +170,26 @@ const Navbar = () => {
                 </span>
               )}
             </Link>
+            {/* Cart */}
+            <Link
+              href="/cart"
+              className="relative flex items-center gap-1.5 text-slate-600 hover:text-indigo-600 transition"
+            >
+              <ShoppingCart size={18} />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 left-2.5 text-[9px] text-white bg-indigo-600 min-w-3.5 h-3.5 px-0.5 rounded-full flex items-center justify-center font-bold">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
             {user ? (
               <div>
                 <UserButton>
                   <UserButton.MenuItems>
                     <UserButton.Action
                       labelIcon={<PackageIcon size={16} />}
-                      label="Orders"
+                      label="Order Activity"
                       onClick={() => router.push("/orders")}
-                    />
-                    <UserButton.Action
-                      labelIcon={<ShoppingCart size={16} />}
-                      label="Cart"
-                      onClick={() => router.push("/cart")}
-                    />
-                    <UserButton.Action
-                      labelIcon={<Heart size={16} />}
-                      label="Watchlist"
-                      onClick={() => router.push("/watchlist")}
                     />
                     {isAdmin && (
                       <UserButton.Action

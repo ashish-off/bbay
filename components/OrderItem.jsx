@@ -60,6 +60,16 @@ const OrderItem = ({ order }) => {
 
                 <td className="text-center max-md:hidden font-medium text-slate-800">{currency}{order.total.toLocaleString()}</td>
 
+                <td className="text-center max-md:hidden">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        order.paymentMethod === 'ESEWA' || order.paymentMethod === 'KHALTI'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                        {order.paymentMethod === 'ESEWA' ? 'eSewa' : order.paymentMethod === 'KHALTI' ? 'Khalti' : 'Cash on Delivery (COD)'}
+                    </span>
+                </td>
+
                 <td className="text-left max-md:hidden text-xs text-slate-600">
                     <p>{order.address?.name}, {order.address?.street},</p>
                     <p>{order.address?.city}, {order.address?.state}, {order.address?.zip}, {order.address?.country}</p>
@@ -83,16 +93,24 @@ const OrderItem = ({ order }) => {
             {/* Mobile */}
             <tr className="md:hidden">
                 <td colSpan={5} className="text-xs text-slate-500 pb-4">
-                    <p>{order.address?.name}, {order.address?.street}, {order.address?.city}</p>
-                    <div className="flex items-center mt-2">
-                        <span className='px-4 py-1 rounded bg-green-100 text-green-700 font-medium' >
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="font-semibold text-slate-800">{currency}{order.total.toLocaleString()}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            order.paymentMethod === 'ESEWA' || order.paymentMethod === 'KHALTI'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                            {order.paymentMethod === 'ESEWA' ? 'eSewa' : order.paymentMethod === 'KHALTI' ? 'Khalti' : 'COD'}
+                        </span>
+                        <span className='px-2.5 py-0.5 rounded bg-green-100 text-green-700 font-medium text-[11px]'>
                             {order.status.replace(/_/g, ' ').toLowerCase()}
                         </span>
                     </div>
+                    <p>{order.address?.name}, {order.address?.street}, {order.address?.city}</p>
                 </td>
             </tr>
             <tr>
-                <td colSpan={4}>
+                <td colSpan={5}>
                     <div className="border-b border-slate-200 w-full mx-auto" />
                 </td>
             </tr>

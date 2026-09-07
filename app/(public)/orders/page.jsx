@@ -84,6 +84,7 @@ function OrdersContent() {
                                     <tr className="max-sm:text-sm text-slate-400 uppercase text-xs tracking-wider max-md:hidden">
                                         <th className="text-left font-semibold">Product</th>
                                         <th className="text-center font-semibold">Total Price</th>
+                                        <th className="text-center font-semibold">Payment</th>
                                         <th className="text-left font-semibold">Delivery Address</th>
                                         <th className="text-left font-semibold">Status</th>
                                     </tr>
