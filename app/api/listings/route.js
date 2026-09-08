@@ -4,48 +4,53 @@ import { uploadImage } from '@/lib/imagekit'
 
 // GET /api/listings — Public listing search
 export async function GET(request) {
-    const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type')         // AUCTION | FIXED
-    const category = searchParams.get('category')
-    const search = searchParams.get('search')
-    const status = searchParams.get('status') || 'ACTIVE'
-    const sort = searchParams.get('sort')         // endingSoon | newest | priceAsc | priceDesc
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    try {
+        const { searchParams } = new URL(request.url)
+        const type = searchParams.get('type')         // AUCTION | FIXED
+        const category = searchParams.get('category')
+        const search = searchParams.get('search')
+        const status = searchParams.get('status') || 'ACTIVE'
+        const sort = searchParams.get('sort')         // endingSoon | newest | priceAsc | priceDesc
+        const limit = parseInt(searchParams.get('limit') || '20')
+        const offset = parseInt(searchParams.get('offset') || '0')
 
-    const where = { status }
+        const where = { status }
 
-    if (type) where.listingType = type.toUpperCase()
-    if (category) where.category = category
-    if (search) {
-        where.OR = [
-            { name: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-            { category: { contains: search, mode: 'insensitive' } },
-        ]
+        if (type) where.listingType = type.toUpperCase()
+        if (category) where.category = category
+        if (search) {
+            where.OR = [
+                { name: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } },
+                { category: { contains: search, mode: 'insensitive' } },
+            ]
+        }
+
+        let orderBy = { createdAt: 'desc' }
+        if (sort === 'endingSoon') orderBy = { auctionEndTime: 'asc' }
+        else if (sort === 'priceAsc') orderBy = { price: 'asc' }
+        else if (sort === 'priceDesc') orderBy = { price: 'desc' }
+        else if (sort === 'newest') orderBy = { createdAt: 'desc' }
+
+        const [listings, total] = await Promise.all([
+            prisma.listing.findMany({
+                where,
+                orderBy,
+                skip: offset,
+                take: limit,
+                include: {
+                    seller: { select: { id: true, name: true, image: true } },
+                    _count: { select: { bids: true, ratings: true } },
+                },
+            }),
+            prisma.listing.count({ where }),
+        ])
+
+        return Response.json({ listings, total, limit, offset })
+    } catch (err) {
+        console.error('Error in GET /api/listings:', err)
+        return Response.json({ error: err.message || 'Failed to fetch listings', listings: [], total: 0 }, { status: 500 })
     }
-
-    let orderBy = { createdAt: 'desc' }
-    if (sort === 'endingSoon') orderBy = { auctionEndTime: 'asc' }
-    else if (sort === 'priceAsc') orderBy = { price: 'asc' }
-    else if (sort === 'priceDesc') orderBy = { price: 'desc' }
-    else if (sort === 'newest') orderBy = { createdAt: 'desc' }
-
-    const [listings, total] = await Promise.all([
-        prisma.listing.findMany({
-            where,
-            orderBy,
-            skip: offset,
-            take: limit,
-            include: {
-                seller: { select: { id: true, name: true, image: true } },
-                _count: { select: { bids: true, ratings: true } },
-            },
-        }),
-        prisma.listing.count({ where }),
-    ])
-
-    return Response.json({ listings, total, limit, offset })
 }
 
 // POST /api/listings — Auth required, create listing with image upload
