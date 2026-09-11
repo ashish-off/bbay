@@ -3,7 +3,7 @@ import { PlusIcon, SquarePenIcon, XIcon, CheckCircle2 } from 'lucide-react';
 import React, { useState } from 'react'
 import AddressModal from './AddressModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAddresses, validateCouponApi, createOrderApi } from '@/lib/api';
+import { fetchAddresses, validateCouponApi, createOrderApi, initiateEsewaPayment } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { useUser, useClerk } from '@clerk/nextjs';
@@ -62,6 +62,8 @@ const OrderSummary = ({ totalPrice, items }) => {
         }
     };
 
+    const [isEsewaProcessing, setIsEsewaProcessing] = useState(false);
+
     const handlePlaceOrder = async (e) => {
         e.preventDefault();
 
@@ -77,11 +79,40 @@ const OrderSummary = ({ totalPrice, items }) => {
             return;
         }
 
-        orderMutation.mutate({
-            addressId: activeAddress.id,
-            paymentMethod,
-            couponCode: coupon?.code || null,
-        });
+        if (paymentMethod === 'ESEWA') {
+            // eSewa flow: initiate payment → redirect to eSewa
+            setIsEsewaProcessing(true);
+            try {
+                const res = await initiateEsewaPayment({
+                    addressId: activeAddress.id,
+                    couponCode: coupon?.code || null,
+                });
+
+                // Create hidden form and auto-submit to eSewa
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = res.paymentUrl;
+                Object.entries(res.formData).forEach(([key, value]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
+                });
+                document.body.appendChild(form);
+                form.submit();
+            } catch (err) {
+                toast.error(err.message || 'Failed to initiate eSewa payment');
+                setIsEsewaProcessing(false);
+            }
+        } else {
+            // COD flow: place order directly
+            orderMutation.mutate({
+                addressId: activeAddress.id,
+                paymentMethod,
+                couponCode: coupon?.code || null,
+            });
+        }
     };
 
     const discountAmount = coupon ? Math.round((coupon.discount / 100) * totalPrice) : 0;
@@ -113,7 +144,18 @@ const OrderSummary = ({ totalPrice, items }) => {
                         checked={paymentMethod === 'ESEWA'} 
                         className='accent-green-600' 
                     />
-                    <span className='text-xs font-semibold text-green-700'>eSewa / Khalti</span>
+                    <span className='text-xs font-semibold text-green-700'>eSewa</span>
+                </label>
+                <label className='flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 cursor-not-allowed opacity-50'>
+                    <input 
+                        type="radio" 
+                        id="KHALTI" 
+                        name='payment' 
+                        disabled
+                        className='accent-purple-600' 
+                    />
+                    <span className='text-xs font-medium text-slate-400'>Khalti</span>
+                    <span className='ml-auto text-[10px] font-semibold bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full'>Coming Soon</span>
                 </label>
             </div>
 
@@ -228,16 +270,16 @@ const OrderSummary = ({ totalPrice, items }) => {
             <button 
                 type="button" 
                 onClick={handlePlaceOrder} 
-                disabled={orderMutation.isPending || items.length === 0}
-                className='w-full bg-indigo-600 disabled:bg-indigo-300 text-white py-3 rounded-xl hover:bg-indigo-700 active:scale-95 transition font-semibold text-sm cursor-pointer shadow-xs flex items-center justify-center gap-2'
+                disabled={orderMutation.isPending || isEsewaProcessing || items.length === 0}
+                className={`w-full ${paymentMethod === 'ESEWA' ? 'bg-green-600 hover:bg-green-700 disabled:bg-green-300' : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300'} text-white py-3 rounded-xl active:scale-95 transition font-semibold text-sm cursor-pointer shadow-xs flex items-center justify-center gap-2`}
             >
-                {orderMutation.isPending ? (
+                {orderMutation.isPending || isEsewaProcessing ? (
                     <>
                         <span className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        Processing Order...
+                        {isEsewaProcessing ? 'Redirecting to eSewa...' : 'Processing Order...'}
                     </>
                 ) : (
-                    "Place Order"
+                    paymentMethod === 'ESEWA' ? 'Pay with eSewa' : 'Place Order'
                 )}
             </button>
 

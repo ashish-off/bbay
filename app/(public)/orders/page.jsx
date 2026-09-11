@@ -1,5 +1,5 @@
 'use client'
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import PageTitle from "@/components/PageTitle"
 import OrderItem from "@/components/OrderItem";
 import CountdownTimer from "@/components/CountdownTimer";
@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchUserOrders, clientCache } from "@/lib/api";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { Package, Gavel, Award } from "lucide-react";
+import toast from "react-hot-toast";
 
 function OrdersContent() {
     const searchParams = useSearchParams();
@@ -21,6 +22,16 @@ function OrdersContent() {
     const [activeTab, setActiveTab] = useState(
         tabParam === 'bids' ? 'bids' : tabParam === 'won' ? 'won' : 'orders'
     );
+
+    // Show toast for eSewa payment result
+    const paymentStatus = searchParams.get('payment');
+    useEffect(() => {
+        if (paymentStatus === 'success') {
+            toast.success('Payment successful! Your order has been placed.');
+        } else if (paymentStatus === 'failed') {
+            toast.error('Payment failed or cancelled. Please try again.');
+        }
+    }, [paymentStatus]);
 
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ['orders'],
