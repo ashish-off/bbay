@@ -17,8 +17,8 @@ const nextConfig = {
     ],
   },
   outputFileTracingIncludes: {
-    '/api/**/*': ['./lib/generated/prisma/**'],
-    '/*': ['./lib/generated/prisma/**'],
+    '/api/**/*': ['./lib/generated/prisma/**', './node_modules/.prisma/**'],
+    '/*': ['./lib/generated/prisma/**', './node_modules/.prisma/**'],
   },
 };
 
