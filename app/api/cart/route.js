@@ -50,6 +50,20 @@ export async function POST(request) {
         return Response.json({ error: 'Listing not found' }, { status: 404 })
     }
 
+    if (!listing.inStock || (listing.stock !== null && listing.stock <= 0)) {
+        return Response.json({ error: 'Item is out of stock' }, { status: 400 })
+    }
+
+    const existingCartItem = await prisma.cartItem.findUnique({
+        where: { userId_listingId: { userId: user.id, listingId } },
+    })
+    const requestedTotal = (existingCartItem?.quantity || 0) + quantity
+    if (listing.stock !== null && requestedTotal > listing.stock) {
+        return Response.json({
+            error: `Cannot add more. Only ${listing.stock} available in stock (you already have ${existingCartItem?.quantity || 0} in cart).`
+        }, { status: 400 })
+    }
+
     const cartItem = await prisma.cartItem.upsert({
         where: {
             userId_listingId: {
@@ -94,6 +108,21 @@ export async function PUT(request) {
             where: { userId: user.id, listingId },
         })
         return Response.json({ success: true, removed: true })
+    }
+
+    const listing = await prisma.listing.findUnique({ where: { id: listingId } })
+    if (!listing) {
+        return Response.json({ error: 'Listing not found' }, { status: 404 })
+    }
+
+    if (!listing.inStock || (listing.stock !== null && listing.stock <= 0)) {
+        return Response.json({ error: 'Item is out of stock' }, { status: 400 })
+    }
+
+    if (listing.stock !== null && quantity > listing.stock) {
+        return Response.json({ 
+            error: `Cannot select ${quantity}. Only ${listing.stock} available in stock.` 
+        }, { status: 400 })
     }
 
     const cartItem = await prisma.cartItem.upsert({

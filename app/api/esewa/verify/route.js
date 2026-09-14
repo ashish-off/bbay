@@ -39,18 +39,19 @@ export async function GET(request) {
         }
 
         // 3. Mark orders as paid
-
         const orderIds = transaction_uuid.split('-')
-        
+
         // Try finding individual orders, or find by composite transaction_uuid
         let orders = await prisma.order.findMany({
             where: { id: { in: orderIds } },
+            include: { orderItems: true },
         })
 
         // If no orders found with split IDs, try the full transaction_uuid as a single order ID
         if (orders.length === 0) {
             const singleOrder = await prisma.order.findUnique({
                 where: { id: transaction_uuid },
+                include: { orderItems: true },
             })
             if (singleOrder) orders = [singleOrder]
         }
@@ -60,15 +61,38 @@ export async function GET(request) {
             return NextResponse.redirect(`${baseUrl}/orders?payment=failed&reason=order-not-found`)
         }
 
-        // Update all matched orders
+        // Update all matched orders and deduct stock
         for (const order of orders) {
-            await prisma.order.update({
-                where: { id: order.id },
-                data: {
-                    isPaid: true,
-                    esewaRefId: transaction_code || statusData.ref_id || null,
-                },
-            })
+            if (!order.isPaid) {
+                await prisma.order.update({
+                    where: { id: order.id },
+                    data: {
+                        isPaid: true,
+                        esewaRefId: transaction_code || statusData.ref_id || null,
+                    },
+                })
+
+                for (const item of order.orderItems || []) {
+                    const listing = await prisma.listing.findUnique({ where: { id: item.listingId } })
+                    if (listing) {
+                        const remaining = Math.max(0, (listing.stock ?? 1) - item.quantity)
+                        await prisma.listing.update({
+                            where: { id: item.listingId },
+                            data: {
+                                stock: remaining,
+                                inStock: remaining > 0,
+                            },
+                        })
+                    }
+                }
+            }
+        }
+
+        // Clear cart for the buyer on successful payment verification
+        if (orders.length > 0 && orders[0].userId) {
+            const buyerId = orders[0].userId
+            await prisma.cartItem.deleteMany({ where: { userId: buyerId } })
+            await prisma.user.update({ where: { id: buyerId }, data: { cart: {} } })
         }
 
         return NextResponse.redirect(`${baseUrl}/orders?payment=success`)

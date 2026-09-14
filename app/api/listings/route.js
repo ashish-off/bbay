@@ -14,10 +14,15 @@ export async function GET(request) {
         const limit = parseInt(searchParams.get('limit') || '20')
         const offset = parseInt(searchParams.get('offset') || '0')
 
+        const includeOutOfStock = searchParams.get('includeOutOfStock') === 'true'
+
         const where = { status }
+        if (!includeOutOfStock) {
+            where.inStock = true
+        }
 
         if (type) where.listingType = type.toUpperCase()
-        if (category) where.category = category
+        if (category) where.category = { contains: category, mode: 'insensitive' }
         if (search) {
             where.OR = [
                 { name: { contains: search, mode: 'insensitive' } },
@@ -112,6 +117,9 @@ export async function POST(request) {
     const startingBid = parseFloat(formData.get('startingBid') || '0')
     const buyNowPrice = formData.get('buyNowPrice') ? parseFloat(formData.get('buyNowPrice')) : null
 
+    const rawStock = formData.get('stock')
+    const stock = isAuction ? 1 : Math.max(1, parseInt(rawStock || '1', 10))
+
     const data = {
         name: formData.get('name'),
         description: formData.get('description'),
@@ -119,6 +127,8 @@ export async function POST(request) {
         images: imageUrls,
         listingType,
         sellerId: user.id,
+        stock,
+        inStock: stock > 0,
 
         // Fixed price fields
         price: isAuction ? null : parseFloat(formData.get('price') || '0'),

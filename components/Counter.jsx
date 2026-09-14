@@ -3,8 +3,9 @@ import { addToCart, removeFromCart } from "@/lib/features/cart/cartSlice";
 import { useDispatch, useSelector } from "react-redux";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateCartQtyApi } from "@/lib/api";
+import toast from "react-hot-toast";
 
-const Counter = ({ productId, quantity: propQty, onUpdate }) => {
+const Counter = ({ productId, quantity: propQty, onUpdate, max }) => {
     const { cartItems } = useSelector(state => state.cart);
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
@@ -16,9 +17,17 @@ const Counter = ({ productId, quantity: propQty, onUpdate }) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cart'] });
         },
+        onError: (err) => {
+            queryClient.invalidateQueries({ queryKey: ['cart'] });
+            toast.error(err.message || 'Failed to update quantity');
+        },
     });
 
     const handleIncrement = () => {
+        if (max !== undefined && max !== null && currentQty >= max) {
+            toast.error(`Only ${max} item(s) available in stock`);
+            return;
+        }
         const nextQty = currentQty + 1;
         if (onUpdate) {
             onUpdate(nextQty);
@@ -51,7 +60,8 @@ const Counter = ({ productId, quantity: propQty, onUpdate }) => {
             <button 
                 type="button" 
                 onClick={handleIncrement} 
-                className="px-1 text-base font-bold select-none hover:text-indigo-600 active:scale-90 transition cursor-pointer"
+                disabled={max !== undefined && max !== null && currentQty >= max}
+                className="px-1 text-base font-bold select-none hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-not-allowed active:scale-90 transition cursor-pointer"
             >
                 +
             </button>

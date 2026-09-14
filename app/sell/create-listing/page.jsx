@@ -20,6 +20,7 @@ export default function CreateListing() {
     const [listingType, setListingType] = useState('auction') // 'auction' | 'fixed'
     // Array of files: [{ id: string, file: File, previewUrl: string }]
     const [selectedImages, setSelectedImages] = useState([])
+    const [selectedCategories, setSelectedCategories] = useState([])
 
     const [productInfo, setProductInfo] = useState({
         name: "",
@@ -30,7 +31,14 @@ export default function CreateListing() {
         buyNowPrice: "",
         duration: "3d", // default 3 days
         category: "",
+        stock: "1",
     })
+
+    const handleCategoryToggle = (cat) => {
+        setSelectedCategories(prev => 
+            prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+        )
+    }
 
     const mutation = useMutation({
         mutationFn: createListing,
@@ -102,6 +110,10 @@ export default function CreateListing() {
             return toast.error('Please add at least 1 image')
         }
 
+        if (selectedCategories.length === 0) {
+            return toast.error('Please select at least 1 category')
+        }
+
         const fd = new FormData()
         selectedImages.forEach(img => {
             fd.append('images', img.file)
@@ -109,7 +121,7 @@ export default function CreateListing() {
 
         fd.append('name', productInfo.name)
         fd.append('description', productInfo.description)
-        fd.append('category', productInfo.category)
+        fd.append('category', selectedCategories.join(', '))
         fd.append('listingType', listingType.toUpperCase())
 
         if (listingType === 'auction') {
@@ -119,6 +131,7 @@ export default function CreateListing() {
         } else {
             fd.append('price', productInfo.price)
             if (productInfo.mrp) fd.append('mrp', productInfo.mrp)
+            fd.append('stock', productInfo.stock || '1')
         }
 
         mutation.mutate(fd)
@@ -240,15 +253,42 @@ export default function CreateListing() {
                 <textarea name="description" onChange={onChangeHandler} value={productInfo.description} placeholder="Describe the item, specifications, inclusions, flaws, etc." rows={4} className="w-full p-2.5 px-3 outline-none border border-slate-200 rounded-lg resize-none text-sm font-normal" required />
             </label>
 
-            <label className="flex flex-col gap-1.5 my-5 text-sm font-medium text-slate-700">
-                Category
-                <select onChange={e => setProductInfo({ ...productInfo, category: e.target.value })} value={productInfo.category} className="w-full p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal" required>
-                    <option value="">Select a category</option>
-                    {categories.map((category) => (
-                        <option key={category} value={category}>{category}</option>
-                    ))}
-                </select>
-            </label>
+            <div className="my-5">
+                <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-slate-700">
+                        Categories <span className="text-xs text-slate-400 font-normal">(Select all that apply)</span>
+                    </label>
+                    {selectedCategories.length > 0 && (
+                        <span className="text-xs text-indigo-600 font-semibold">
+                            {selectedCategories.length} selected
+                        </span>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-2">
+                    {categories.map((cat) => {
+                        const isSelected = selectedCategories.includes(cat);
+                        return (
+                            <button
+                                key={cat}
+                                type="button"
+                                onClick={() => handleCategoryToggle(cat)}
+                                className={`px-3.5 py-2 rounded-xl text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                    isSelected
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-200 font-semibold'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
+                                }`}
+                            >
+                                {isSelected ? <span>✓ {cat}</span> : <span>+ {cat}</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {selectedCategories.length === 0 && (
+                    <p className="text-[11px] text-amber-600 mt-1.5">Please select at least one category</p>
+                )}
+            </div>
 
             {/* Auction Format Pricing */}
             {listingType === 'auction' ? (
@@ -300,7 +340,7 @@ export default function CreateListing() {
                 </div>
             ) : (
                 /* Fixed Price Fields */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-5">
                     <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
                         Selling Price ({currency})
                         <input 
@@ -323,6 +363,19 @@ export default function CreateListing() {
                             value={productInfo.mrp} 
                             placeholder="e.g. 6000" 
                             className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal" 
+                        />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                        Stock Quantity
+                        <input 
+                            type="number" 
+                            name="stock" 
+                            onChange={onChangeHandler} 
+                            value={productInfo.stock} 
+                            placeholder="e.g. 10" 
+                            min="1"
+                            className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal" 
+                            required 
                         />
                     </label>
                 </div>

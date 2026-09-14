@@ -8,9 +8,22 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchCart, removeFromCartApi, updateCartQtyApi, clientCache } from "@/lib/api";
 import { useUser, useClerk } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
+import { useEffect, Suspense } from "react";
 import toast from "react-hot-toast";
 
-export default function Cart() {
+function CartContent() {
+    const searchParams = useSearchParams();
+    const paymentStatus = searchParams?.get('payment');
+
+    useEffect(() => {
+        if (paymentStatus === 'cancelled') {
+            toast('Payment cancelled. Your cart items are preserved.', { icon: 'ℹ️' });
+        } else if (paymentStatus === 'failed') {
+            toast.error('Payment failed. Please try again.');
+        }
+    }, [paymentStatus]);
+
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु';
     const { user, isLoaded } = useUser();
     const { openSignIn } = useClerk();
@@ -42,6 +55,10 @@ export default function Cart() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cart'] });
         },
+        onError: (err) => {
+            queryClient.invalidateQueries({ queryKey: ['cart'] });
+            toast.error(err.message || 'Failed to update quantity');
+        },
     });
 
     const items = cartData?.items || [];
@@ -55,6 +72,11 @@ export default function Cart() {
     };
 
     const handleQtyChange = (listingId, newQty) => {
+        const item = items.find(i => i.id === listingId);
+        if (item && item.stock !== undefined && item.stock !== null && newQty > item.stock) {
+            toast.error(`Only ${item.stock} item(s) available in stock`);
+            return;
+        }
         updateQtyMutation.mutate({ listingId, quantity: newQty });
     };
 
@@ -135,12 +157,18 @@ export default function Cart() {
                                                     <p className="text-sm font-medium text-slate-700 mt-1">
                                                         {currency}{unitPrice.toLocaleString()}
                                                     </p>
+                                                    {(!item.inStock || (item.stock !== undefined && item.stock <= 0)) ? (
+                                                        <span className="text-[11px] text-red-600 font-medium mt-0.5">Out of stock</span>
+                                                    ) : item.stock !== undefined && item.stock !== null && item.stock <= 3 ? (
+                                                        <span className="text-[11px] text-amber-600 font-medium mt-0.5">Only {item.stock} left</span>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                             <td className="text-center py-4">
                                                 <Counter 
                                                     productId={item.id} 
                                                     quantity={qty} 
+                                                    max={item.stock}
                                                     onUpdate={(newQty) => handleQtyChange(item.id, newQty)} 
                                                 />
                                             </td>
@@ -185,5 +213,13 @@ export default function Cart() {
                 Start Shopping
             </Link>
         </div>
+    );
+}
+
+export default function Cart() {
+    return (
+        <Suspense fallback={<div className="min-h-[70vh] flex items-center justify-center text-slate-400">Loading cart...</div>}>
+            <CartContent />
+        </Suspense>
     );
 }

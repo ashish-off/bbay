@@ -9,7 +9,13 @@ export async function GET() {
     const { user } = authResult
 
     const orders = await prisma.order.findMany({
-        where: { userId: user.id },
+        where: {
+            userId: user.id,
+            NOT: {
+                paymentMethod: 'ESEWA',
+                isPaid: false,
+            },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
             orderItems: {
@@ -95,6 +101,16 @@ export async function POST(request) {
         }
     }
 
+    // Validate stock for each item before placing order
+    for (const item of itemsToOrder) {
+        const { listing, quantity } = item
+        if (!listing.inStock || (listing.stock !== null && listing.stock < quantity)) {
+            return Response.json({
+                error: `"${listing.name}" has only ${listing.stock ?? 0} available in stock. Please adjust your cart.`
+            }, { status: 400 })
+        }
+    }
+
     // Group items by seller
     const sellerGroups = {}
     for (const item of itemsToOrder) {
@@ -143,6 +159,20 @@ export async function POST(request) {
                 },
             })
             createdOrders.push(order)
+        }
+
+        // Deduct stock for each purchased item
+        for (const item of itemsToOrder) {
+            const { listing, quantity } = item
+            const currentStock = listing.stock !== null ? listing.stock : 1
+            const remaining = Math.max(0, currentStock - quantity)
+            await tx.listing.update({
+                where: { id: listing.id },
+                data: {
+                    stock: remaining,
+                    inStock: remaining > 0,
+                },
+            })
         }
 
         // Clear cart in both CartItem table and legacy JSON

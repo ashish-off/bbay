@@ -79,6 +79,7 @@ model Listing {
     listingType    ListingType
     status         ListingStatus @default(ACTIVE)
     inStock        Boolean       @default(true)
+    stock          Int           @default(1)
 
     // Fixed price fields
     price          Float?

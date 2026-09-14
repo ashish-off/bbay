@@ -38,28 +38,42 @@ const ProductDetails = ({ product }) => {
 
     const isInCart = Boolean(cart[productId]);
 
+    const maxStock = product.stock !== undefined && product.stock !== null ? product.stock : 999;
+    const isOutOfStock = !product.inStock || maxStock <= 0;
+
     const addToCartHandler = async () => {
         if (isInCart) {
             router.push('/cart')
             return
         }
-        dispatch(addToCart({ productId, quantity }))
+        if (isOutOfStock) {
+            toast.error('Item is currently out of stock')
+            return
+        }
         try {
             await addToCartApi({ listingId: productId, quantity })
+            dispatch(addToCart({ productId, quantity }))
             queryClient.invalidateQueries({ queryKey: ['cart'] })
             toast.success(`Added ${quantity} item(s) to cart!`)
-        } catch {
-            toast.success(`Added ${quantity} item(s) to cart!`)
+        } catch (err) {
+            toast.error(err.message || 'Failed to add to cart')
         }
     }
 
     const buyNowDirectHandler = async () => {
+        if (isOutOfStock) {
+            toast.error('Item is currently out of stock')
+            return
+        }
         if (!isInCart) {
-            dispatch(addToCart({ productId, quantity }))
             try {
                 await addToCartApi({ listingId: productId, quantity })
+                dispatch(addToCart({ productId, quantity }))
                 queryClient.invalidateQueries({ queryKey: ['cart'] })
-            } catch {}
+            } catch (err) {
+                toast.error(err.message || 'Failed to add to cart')
+                return
+            }
         }
         router.push('/cart')
     }
@@ -213,41 +227,64 @@ const ProductDetails = ({ product }) => {
                             </div>
                         )}
 
-                        {/* Quantity Selector by default */}
-                        <div className="flex flex-col gap-2 mt-6">
-                            <p className="text-sm text-slate-700 font-semibold">Quantity</p>
-                            <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg border border-slate-300 w-max text-slate-700 bg-slate-50/50">
-                                <button 
-                                    onClick={() => setQuantity(prev => Math.max(1, prev - 1))} 
-                                    className="px-2 py-0.5 text-lg font-bold select-none hover:text-indigo-600 active:scale-95"
-                                >
-                                    -
-                                </button>
-                                <span className="font-semibold text-sm min-w-4 text-center">{quantity}</span>
-                                <button 
-                                    onClick={() => setQuantity(prev => prev + 1)} 
-                                    className="px-2 py-0.5 text-lg font-bold select-none hover:text-indigo-600 active:scale-95"
-                                >
-                                    +
-                                </button>
+                        {/* Quantity Selector or Out of Stock Alert */}
+                        {isOutOfStock ? (
+                            <div className="mt-6 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium inline-block">
+                                ⚠️ Currently Out of Stock
                             </div>
-                        </div>
+                        ) : (
+                            <div className="flex flex-col gap-2 mt-6">
+                                <div className="flex items-center gap-2">
+                                    <p className="text-sm text-slate-700 font-semibold">Quantity</p>
+                                    {product.stock !== undefined && product.stock !== null && (
+                                        <span className={`text-xs ${product.stock <= 3 ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>
+                                            ({product.stock} available)
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg border border-slate-300 w-max text-slate-700 bg-slate-50/50">
+                                    <button 
+                                        onClick={() => setQuantity(prev => Math.max(1, prev - 1))} 
+                                        disabled={quantity <= 1}
+                                        className="px-2 py-0.5 text-lg font-bold select-none hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-not-allowed active:scale-95"
+                                    >
+                                        -
+                                    </button>
+                                    <span className="font-semibold text-sm min-w-4 text-center">{quantity}</span>
+                                    <button 
+                                        onClick={() => {
+                                            if (quantity >= maxStock) {
+                                                toast.error(`Only ${maxStock} item(s) available in stock`)
+                                                return
+                                            }
+                                            setQuantity(prev => prev + 1)
+                                        }} 
+                                        disabled={quantity >= maxStock}
+                                        className="px-2 py-0.5 text-lg font-bold select-none hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-not-allowed active:scale-95"
+                                    >
+                                        +
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Buy Now & Add to Cart on Fixed items */}
                         <div className="flex flex-wrap items-center gap-3 mt-6">
                             <button 
                                 onClick={buyNowDirectHandler} 
-                                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 text-sm font-medium rounded-lg active:scale-95 transition"
+                                disabled={isOutOfStock}
+                                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3 text-sm font-medium rounded-lg active:scale-95 transition"
                             >
                                 <Zap size={16} />
-                                Buy It Now
+                                {isOutOfStock ? 'Out of Stock' : 'Buy It Now'}
                             </button>
                             <button 
                                 onClick={addToCartHandler} 
-                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-8 py-3 text-sm font-medium rounded-lg active:scale-95 transition"
+                                disabled={isOutOfStock}
+                                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3 text-sm font-medium rounded-lg active:scale-95 transition"
                             >
                                 <ShoppingCart size={16} />
-                                {isInCart ? 'View in Cart' : 'Add to Cart'}
+                                {isOutOfStock ? 'Unavailable' : isInCart ? 'View in Cart' : 'Add to Cart'}
                             </button>
                         </div>
                     </>

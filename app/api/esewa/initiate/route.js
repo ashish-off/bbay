@@ -68,6 +68,16 @@ export async function POST(request) {
         }
     }
 
+    // Validate stock for each item before initiating payment
+    for (const item of itemsToOrder) {
+        const { listing, quantity } = item
+        if (!listing.inStock || (listing.stock !== null && listing.stock < quantity)) {
+            return Response.json({
+                error: `"${listing.name}" has only ${listing.stock ?? 0} available in stock. Please adjust your cart.`
+            }, { status: 400 })
+        }
+    }
+
     // Group by seller and create orders
     const sellerGroups = {}
     for (const item of itemsToOrder) {
@@ -112,10 +122,7 @@ export async function POST(request) {
             createdOrders.push(order)
         }
 
-        // Clear cart
-        await tx.cartItem.deleteMany({ where: { userId: user.id } })
-        await tx.user.update({ where: { id: user.id }, data: { cart: {} } })
-
+        // Do not clear cart here; cart is cleared in verify route upon successful payment
         return createdOrders
     }, {
         maxWait: 10000,

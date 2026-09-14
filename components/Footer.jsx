@@ -52,9 +52,8 @@ const Footer = () => {
             <div className="max-w-7xl mx-auto">
                 <div className="flex flex-col md:flex-row items-start justify-between gap-10 py-10 border-b border-slate-500/30 text-slate-500">
                     <div>
-                        <Link href="/" className="text-3xl font-bold text-slate-800 tracking-tight inline-flex items-center gap-1">
+                        <Link href="/" className="text-3xl font-bold text-slate-800 tracking-tight">
                             <span className="text-indigo-600">B</span>bay
-                            <Gavel size={14} className="text-indigo-500 rotate-45" />
                         </Link>
                         <p className="max-w-[410px] mt-6 text-sm">Welcome to bbay, Nepal&apos;s premier auction and shopping platform. Bid on unique items, sell your stuff, or buy at fixed prices — all in one place. Based in Pokhara, serving all of Nepal.</p>
                         <div className="flex items-center gap-3 mt-5">

@@ -36,6 +36,7 @@ const OrderSummary = ({ totalPrice, items }) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cart'] });
             queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['listings'] });
             toast.success('Order placed successfully!');
             router.push('/orders');
         },

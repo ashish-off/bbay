@@ -30,6 +30,8 @@ function OrdersContent() {
             toast.success('Payment successful! Your order has been placed.');
         } else if (paymentStatus === 'failed') {
             toast.error('Payment failed or cancelled. Please try again.');
+        } else if (paymentStatus === 'cancelled') {
+            toast('Payment was cancelled. Your cart items are preserved.', { icon: 'ℹ️' });
         }
     }, [paymentStatus]);
 
@@ -37,7 +39,6 @@ function OrdersContent() {
         queryKey: ['orders'],
         queryFn: fetchUserOrders,
         enabled: Boolean(user),
-        initialData: () => clientCache.get('user_orders') || undefined,
     });
 
     if (isLoaded && !user) {

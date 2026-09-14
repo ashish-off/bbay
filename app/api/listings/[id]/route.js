@@ -50,10 +50,17 @@ export async function PUT(request, { params }) {
     }
 
     const body = await request.json()
-    const allowedFields = ['name', 'description', 'category', 'price', 'mrp', 'inStock']
+    const allowedFields = ['name', 'description', 'category', 'price', 'mrp', 'inStock', 'stock']
     const data = {}
     for (const field of allowedFields) {
         if (body[field] !== undefined) data[field] = body[field]
+    }
+    if (body.stock !== undefined) {
+        const numStock = parseInt(body.stock, 10)
+        data.stock = isNaN(numStock) ? 0 : Math.max(0, numStock)
+        if (body.inStock === undefined) {
+            data.inStock = data.stock > 0
+        }
     }
 
     const updated = await prisma.listing.update({

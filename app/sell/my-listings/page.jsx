@@ -109,7 +109,10 @@ export default function MyListings() {
                                             {isAuction && product.auctionEndTime ? (
                                                 <CountdownTimer endTime={product.auctionEndTime} compact />
                                             ) : (
-                                                <span className="text-xs text-slate-400">Buy It Now</span>
+                                                <div>
+                                                    <span className="text-xs text-slate-400">Buy It Now</span>
+                                                    <p className="text-xs font-medium text-slate-600">Stock: {product.stock ?? 1}</p>
+                                                </div>
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-center">

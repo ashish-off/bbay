@@ -9,7 +9,13 @@ export async function GET() {
     const { user } = authResult
 
     const orders = await prisma.order.findMany({
-        where: { sellerId: user.id },
+        where: {
+            sellerId: user.id,
+            NOT: {
+                paymentMethod: 'ESEWA',
+                isPaid: false,
+            },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
             user: { select: { id: true, name: true, email: true, image: true } },
