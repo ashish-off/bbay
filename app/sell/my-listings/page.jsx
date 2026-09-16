@@ -2,16 +2,18 @@
 import { toast } from "react-hot-toast"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import Loading from "@/components/Loading"
 import CountdownTimer from "@/components/CountdownTimer"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchSellerListings, toggleListingStock } from "@/lib/api"
+import { fetchSellerListings, toggleListingStock, deleteListing } from "@/lib/api"
 import { assets } from "@/assets/assets"
-import { PlusCircle, ExternalLink } from "lucide-react"
+import { PlusCircle, Pencil, Trash2 } from "lucide-react"
 
 export default function MyListings() {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
+    const router = useRouter()
     const queryClient = useQueryClient()
 
     const { data: listings = [], isLoading, error } = useQuery({
@@ -27,6 +29,18 @@ export default function MyListings() {
         },
         onError: (err) => {
             toast.error(err.message || 'Failed to update')
+        },
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteListing,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['seller-listings'] })
+            queryClient.invalidateQueries({ queryKey: ['listings'] })
+            toast.success("Listing deleted successfully")
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Failed to delete listing')
         },
     })
 
@@ -67,14 +81,19 @@ export default function MyListings() {
                                 <th className="px-4 py-3">Price / Current Bid</th>
                                 <th className="px-4 py-3">Time Left</th>
                                 <th className="px-4 py-3 text-center">Active</th>
-                                <th className="px-4 py-3 text-center">View</th>
+                                <th className="px-4 py-3 text-center">Edit</th>
+                                <th className="px-4 py-3 text-center">Delete</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {listings.map((product) => {
                                 const isAuction = product.listingType?.toLowerCase() === 'auction'
                                 return (
-                                    <tr key={product.id} className="hover:bg-slate-50/80 transition-colors">
+                                    <tr 
+                                        key={product.id} 
+                                        onClick={() => router.push(`/product/${product.id}`)}
+                                        className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                                    >
                                         <td className="px-4 py-3">
                                             <div className="flex gap-3 items-center">
                                                 <Image 
@@ -85,7 +104,7 @@ export default function MyListings() {
                                                     alt="" 
                                                 />
                                                 <div>
-                                                    <p className="font-medium text-slate-800">{product.name}</p>
+                                                    <p className="font-medium text-slate-800 group-hover:text-indigo-600 transition-colors">{product.name}</p>
                                                     <p className="text-xs text-slate-400">{product.category}</p>
                                                 </div>
                                             </div>
@@ -115,7 +134,7 @@ export default function MyListings() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-4 py-3 text-center">
+                                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                             <label className="relative inline-flex items-center cursor-pointer">
                                                 <input 
                                                     type="checkbox" 
@@ -127,14 +146,29 @@ export default function MyListings() {
                                                 <span className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
                                             </label>
                                         </td>
-                                        <td className="px-4 py-3 text-center">
+                                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                             <Link 
-                                                href={`/product/${product.id}`}
-                                                className="inline-flex items-center text-slate-400 hover:text-indigo-600 transition"
-                                                title="View Listing"
+                                                href={`/sell/edit-listing/${product.id}`}
+                                                className="inline-flex items-center text-slate-400 hover:text-indigo-600 transition p-1.5 rounded-md hover:bg-slate-100"
+                                                title="Edit Listing"
                                             >
-                                                <ExternalLink size={16} />
+                                                <Pencil size={16} />
                                             </Link>
+                                        </td>
+                                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    if (window.confirm("Are you sure you want to delete this listing?")) {
+                                                        deleteMutation.mutate(product.id)
+                                                    }
+                                                }}
+                                                disabled={deleteMutation.isPending}
+                                                className="inline-flex items-center text-slate-400 hover:text-red-600 transition p-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
+                                                title="Delete Listing"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 )

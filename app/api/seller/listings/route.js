@@ -9,12 +9,16 @@ export async function GET() {
     const { user } = authResult
 
     const listings = await prisma.listing.findMany({
-        where: { sellerId: user.id },
+        where: { 
+            sellerId: user.id,
+            status: { not: 'CANCELLED' },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
             _count: { select: { bids: true, orderItems: true, watchedBy: true } },
         },
     })
+
 
     return Response.json(listings)
 }
