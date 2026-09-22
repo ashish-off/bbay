@@ -25,6 +25,7 @@ export default function Dashboard() {
         activeListings: dashboardData?.activeListings || 0,
         totalEarnings: dashboardData?.totalEarnings || 0,
         totalOrders: dashboardData?.totalOrders || 0,
+        itemsSold: dashboardData?.itemsSold ?? dashboardData?.totalOrders ?? 0,
         activeAuctions: dashboardData?.activeAuctions || 0,
         ratings: dashboardData?.ratings || [],
     }
@@ -32,7 +33,7 @@ export default function Dashboard() {
     const dashboardCardsData = [
         { title: 'Active Listings', value: stats.activeListings, icon: ShoppingBasketIcon },
         { title: 'Total Earnings', value: currency + Number(stats.totalEarnings).toLocaleString(), icon: CircleDollarSignIcon },
-        { title: 'Items Sold', value: stats.totalOrders, icon: StarIcon },
+        { title: 'Items Sold', value: stats.itemsSold, icon: StarIcon },
         { title: 'Live Auctions', value: stats.activeAuctions, icon: GavelIcon },
     ]
 

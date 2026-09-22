@@ -12,14 +12,27 @@ export async function GET() {
         return Response.json({ error: 'Admin only' }, { status: 403 })
     }
 
+    const orderFilter = {
+        NOT: {
+            paymentMethod: 'ESEWA',
+            isPaid: false,
+        },
+    }
+
     const [totalListings, activeAuctions, totalTransactions, revenue, recentOrders] = await Promise.all([
         prisma.listing.count(),
         prisma.listing.count({
             where: { listingType: 'AUCTION', status: 'ACTIVE' },
         }),
-        prisma.order.count(),
-        prisma.order.aggregate({ _sum: { total: true } }),
+        prisma.order.count({
+            where: orderFilter,
+        }),
+        prisma.order.aggregate({
+            where: orderFilter,
+            _sum: { total: true },
+        }),
         prisma.order.findMany({
+            where: orderFilter,
             orderBy: { createdAt: 'desc' },
             take: 50,
             select: { id: true, total: true, status: true, createdAt: true },
