@@ -32,14 +32,10 @@ const ProductDetails = ({ product }) => {
     const router = useRouter();
     const queryClient = useQueryClient();
 
-    const [mainImage, setMainImage] = useState(product.images?.[0] || '');
+    const [selectedImage, setSelectedImage] = useState(null);
+    const mainImage = selectedImage || product.images?.[0] || '';
+    const setMainImage = (img) => setSelectedImage(img);
     const [quantity, setQuantity] = useState(1);
-
-    useEffect(() => {
-        if (product.images?.[0]) {
-            setMainImage(product.images[0]);
-        }
-    }, [product.images]);
 
     const isInCart = Boolean(cart[productId]);
 

@@ -28,6 +28,11 @@ const BidHistory = ({ productId }) => {
 
     return (
         <div className="mt-4 max-w-lg">
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-700">
+                    Total Bids: <span className="text-indigo-600 font-bold">({bids.length})</span>
+                </span>
+            </div>
             <table className="w-full text-sm text-left">
                 <thead>
                     <tr className="text-slate-500 border-b border-slate-200">

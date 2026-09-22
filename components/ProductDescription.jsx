@@ -5,7 +5,7 @@ import { useState } from "react"
 import BidHistory from "./BidHistory"
 import { assets } from "@/assets/assets"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchRatings, createRatingApi } from "@/lib/api"
+import { fetchRatings, createRatingApi, fetchListingBids } from "@/lib/api"
 import { useUser, useClerk } from "@clerk/nextjs"
 import toast from "react-hot-toast"
 
@@ -30,6 +30,16 @@ const ProductDescription = ({ product }) => {
         queryFn: () => fetchRatings(product.id),
         initialData: product.ratings || [],
     })
+
+    // Fetch live bids for auction
+    const { data: liveBids = [] } = useQuery({
+        queryKey: ['bids', product.id],
+        queryFn: () => fetchListingBids(product.id),
+        enabled: Boolean(isAuction && product.id),
+        initialData: product.bids || [],
+    })
+
+    const bidsCount = liveBids.length || product.bidCount || product._count?.bids || 0
 
     const isSeller = user?.id === product.sellerId
 
@@ -88,7 +98,7 @@ const ProductDescription = ({ product }) => {
                         onClick={() => setSelectedTab(tab)}
                         className={`${tab === selectedTab ? 'border-b-2 border-indigo-600 text-indigo-600 font-semibold' : 'text-slate-400 hover:text-slate-700'} px-4 py-2.5 font-medium transition cursor-pointer`}
                     >
-                        {tab} {tab === 'Reviews' && `(${liveReviews.length})`}
+                        {tab} {tab === 'Reviews' && `(${liveReviews.length})`} {tab === 'Bid History' && `(${bidsCount})`}
                     </button>
                 ))}
             </div>

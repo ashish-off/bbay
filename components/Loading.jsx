@@ -1,10 +1,17 @@
 'use client'
 
-const Loading = () => {
-
+const Loading = ({ fullScreen = false, label = "Loading...", className = "" }) => {
     return (
-        <div className='flex items-center justify-center h-screen'>
-            <div className='w-11 h-11 rounded-full border-3 border-gray-300 border-t-green-500 animate-spin'></div>
+        <div className={`flex flex-col items-center justify-center gap-3 w-full ${fullScreen ? 'h-screen' : 'py-16 min-h-[220px]'} ${className}`}>
+            <div className='relative flex items-center justify-center'>
+                <div className='size-11 rounded-full border-4 border-slate-200 border-t-indigo-600 animate-spin'></div>
+                <div className='absolute size-2 rounded-full bg-indigo-600/80'></div>
+            </div>
+            {label && (
+                <p className="text-xs text-slate-400 font-medium tracking-wide animate-pulse">
+                    {label}
+                </p>
+            )}
         </div>
     )
 }

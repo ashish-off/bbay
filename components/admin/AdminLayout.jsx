@@ -4,18 +4,37 @@ import Link from "next/link"
 import { ArrowRightIcon, ShieldAlert } from "lucide-react"
 import AdminNavbar from "./AdminNavbar"
 import AdminSidebar from "./AdminSidebar"
+import { useUser, useClerk } from "@clerk/nextjs"
+import { useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { checkAdminStatus } from "@/lib/api"
 
 const AdminLayout = ({ children }) => {
+    const { user, isLoaded: isUserLoaded } = useUser()
+    const { redirectToSignIn } = useClerk()
+
+    useEffect(() => {
+        if (isUserLoaded && !user) {
+            redirectToSignIn({ returnBackUrl: window.location.href })
+        }
+    }, [isUserLoaded, user, redirectToSignIn])
 
     const { data, isLoading } = useQuery({
         queryKey: ['admin-check'],
         queryFn: checkAdminStatus,
+        enabled: Boolean(user),
         staleTime: 60 * 1000,
     })
 
     const isAdmin = Boolean(data?.isAdmin)
+
+    if (!isUserLoaded || (isUserLoaded && !user)) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loading label="Redirecting to login..." />
+            </div>
+        )
+    }
 
     return isLoading ? (
         <div className="min-h-screen flex items-center justify-center">

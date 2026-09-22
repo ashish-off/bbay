@@ -30,3 +30,26 @@ export async function PUT(request, { params }) {
 
     return Response.json(updated)
 }
+
+// DELETE /api/seller/orders/[id] — Auth required (seller only), delete order
+export async function DELETE(request, { params }) {
+    const authResult = await getAuthUser()
+    if (!authResult) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { id } = await params
+    const { user } = authResult
+
+    const order = await prisma.order.findUnique({ where: { id } })
+    if (!order) {
+        return Response.json({ error: 'Order not found' }, { status: 404 })
+    }
+    if (order.sellerId !== user.id) {
+        return Response.json({ error: 'Not your order to delete' }, { status: 403 })
+    }
+
+    await prisma.order.delete({
+        where: { id },
+    })
+
+    return Response.json({ success: true, message: 'Order deleted successfully' })
+}

@@ -101,14 +101,60 @@ export async function PUT(request, { params }) {
 
         data.images = [...existingImages, ...newImageUrls]
 
+        // Auction duration handling
+        const duration = formData.get('duration')
+        const durationHoursParam = formData.get('durationHours')
+
+        if (listing.listingType === 'AUCTION') {
+            if ((duration && duration !== 'keep') || durationHoursParam) {
+                let durationHours = 72 // default 3 days
+                if (durationHoursParam) {
+                    durationHours = parseFloat(durationHoursParam)
+                } else if (duration) {
+                    const str = String(duration).trim().toLowerCase()
+                    if (str.endsWith('h')) {
+                        durationHours = parseFloat(str.replace('h', ''))
+                    } else if (str.endsWith('d')) {
+                        durationHours = parseFloat(str.replace('d', '')) * 24
+                    } else {
+                        const num = parseFloat(str)
+                        durationHours = num <= 14 ? num * 24 : num
+                    }
+                }
+                data.auctionEndTime = new Date(Date.now() + Math.round(durationHours * 60 * 60 * 1000))
+                data.status = 'ACTIVE'
+                data.inStock = true
+                data.winnerId = null
+                data.winnerBidId = null
+                if (startingBid !== null && startingBid !== '') {
+                    data.currentBid = parseFloat(startingBid)
+                }
+            } else if (listing.status === 'EXPIRED' || (listing.auctionEndTime && new Date(listing.auctionEndTime) <= new Date())) {
+                // If auction was expired/ended and user edited/saved without changing duration, reactivate with 3 days
+                data.auctionEndTime = new Date(Date.now() + 72 * 60 * 60 * 1000)
+                data.status = 'ACTIVE'
+                data.inStock = true
+                data.winnerId = null
+                data.winnerBidId = null
+                if (startingBid !== null && startingBid !== '') {
+                    data.currentBid = parseFloat(startingBid)
+                }
+            }
+        }
+
         // Re-activate listing if stock was restocked and listing was out of stock
         if (data.stock > 0 && listing.status === 'ACTIVE' && !listing.inStock) {
             data.inStock = true
+        } else if (listing.listingType === 'FIXED' && data.stock > 0) {
+            data.inStock = true
+            if (listing.status === 'EXPIRED' || listing.status === 'CANCELLED') {
+                data.status = 'ACTIVE'
+            }
         }
     } else {
         // Simple JSON update (e.g., toggleStock)
         const body = await request.json()
-        const allowedFields = ['name', 'description', 'category', 'price', 'mrp', 'inStock', 'stock']
+        const allowedFields = ['name', 'description', 'category', 'price', 'mrp', 'inStock', 'stock', 'status']
         for (const field of allowedFields) {
             if (body[field] !== undefined) data[field] = body[field]
         }
@@ -117,6 +163,23 @@ export async function PUT(request, { params }) {
             data.stock = isNaN(numStock) ? 0 : Math.max(0, numStock)
             if (body.inStock === undefined) {
                 data.inStock = data.stock > 0
+            }
+        }
+        // Reactivate expired/inactive listing when turned on
+        if (body.inStock === true) {
+            data.inStock = true
+            if (listing.status === 'EXPIRED' || listing.status === 'CANCELLED') {
+                data.status = 'ACTIVE'
+            }
+            if (listing.listingType === 'AUCTION') {
+                if (!listing.auctionEndTime || new Date(listing.auctionEndTime) <= new Date() || listing.status === 'EXPIRED') {
+                    data.auctionEndTime = new Date(Date.now() + 72 * 60 * 60 * 1000)
+                    data.status = 'ACTIVE'
+                    data.winnerId = null
+                    data.winnerBidId = null
+                    data.currentBid = listing.startingBid || 0
+                    data.bidCount = 0
+                }
             }
         }
     }

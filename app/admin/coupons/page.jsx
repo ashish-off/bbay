@@ -10,7 +10,7 @@ import Loading from "@/components/Loading"
 export default function AdminCoupons() {
     const queryClient = useQueryClient()
 
-    const [newCoupon, setNewCoupon] = useState({
+    const [newCoupon, setNewCoupon] = useState(() => ({
         code: '',
         description: '',
         discount: '',
@@ -18,7 +18,7 @@ export default function AdminCoupons() {
         forMember: false,
         isPublic: true,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days default
-    })
+    }))
 
     const { data: coupons = [], isLoading, error } = useQuery({
         queryKey: ['admin-coupons'],

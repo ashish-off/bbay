@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchListing, updateListing } from "@/lib/api"
 import { X, Plus, ArrowLeft, Save } from "lucide-react"
 import Loading from "@/components/Loading"
+import CountdownTimer from "@/components/CountdownTimer"
 import Link from "next/link"
 
 export default function EditListing() {
@@ -42,27 +43,45 @@ export default function EditListing() {
         price: "",
         startingBid: "",
         buyNowPrice: "",
+        duration: "keep",
         stock: "1",
     })
+
+    const isAuction = listing?.listingType?.toUpperCase() === 'AUCTION'
+    const isExpiredOrEnded = isAuction && (
+        listing?.status === 'EXPIRED' || 
+        listing?.status === 'CANCELLED' || 
+        (listing?.auctionEndTime && new Date(listing.auctionEndTime) <= new Date())
+    )
 
     // Pre-fill form once listing loads
     useEffect(() => {
         if (listing && !initialized) {
-            setListingType(listing.listingType?.toLowerCase() || 'fixed')
-            setExistingImages(listing.images || [])
-            setSelectedCategories(
-                listing.category ? listing.category.split(',').map(c => c.trim()).filter(Boolean) : []
-            )
-            setProductInfo({
-                name: listing.name || "",
-                description: listing.description || "",
-                mrp: listing.mrp != null ? String(listing.mrp) : "",
-                price: listing.price != null ? String(listing.price) : "",
-                startingBid: listing.startingBid != null ? String(listing.startingBid) : "",
-                buyNowPrice: listing.buyNowPrice != null ? String(listing.buyNowPrice) : "",
-                stock: listing.stock != null ? String(listing.stock) : "1",
-            })
-            setInitialized(true)
+            const timer = setTimeout(() => {
+                const isListingAuction = listing.listingType?.toUpperCase() === 'AUCTION'
+                const isEnded = isListingAuction && (
+                    listing.status === 'EXPIRED' || 
+                    listing.status === 'CANCELLED' || 
+                    (listing.auctionEndTime && new Date(listing.auctionEndTime) <= new Date())
+                )
+                setListingType(listing.listingType?.toLowerCase() || 'fixed')
+                setExistingImages(listing.images || [])
+                setSelectedCategories(
+                    listing.category ? listing.category.split(',').map(c => c.trim()).filter(Boolean) : []
+                )
+                setProductInfo({
+                    name: listing.name || "",
+                    description: listing.description || "",
+                    mrp: listing.mrp != null ? String(listing.mrp) : "",
+                    price: listing.price != null ? String(listing.price) : "",
+                    startingBid: listing.startingBid != null ? String(listing.startingBid) : "",
+                    buyNowPrice: listing.buyNowPrice != null ? String(listing.buyNowPrice) : "",
+                    duration: isEnded ? "3d" : "keep",
+                    stock: listing.stock != null ? String(listing.stock) : "1",
+                })
+                setInitialized(true)
+            }, 0)
+            return () => clearTimeout(timer)
         }
     }, [listing, initialized])
 
@@ -169,6 +188,7 @@ export default function EditListing() {
         if (listingType === 'auction') {
             fd.append('startingBid', productInfo.startingBid)
             if (productInfo.buyNowPrice) fd.append('buyNowPrice', productInfo.buyNowPrice)
+            fd.append('duration', productInfo.duration || 'keep')
         } else {
             fd.append('price', productInfo.price)
             fd.append('mrp', productInfo.mrp || '')
@@ -367,31 +387,84 @@ export default function EditListing() {
 
             {/* Pricing fields based on type */}
             {listingType === 'auction' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-5">
-                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
-                        Starting Bid ({currency})
-                        <input
-                            type="number"
-                            name="startingBid"
-                            onChange={onChangeHandler}
-                            value={productInfo.startingBid}
-                            placeholder="e.g. 1000"
-                            min="1"
-                            className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal"
-                            required
-                        />
-                    </label>
-                    <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
-                        Buy It Now Price ({currency})
-                        <input
-                            type="number"
-                            name="buyNowPrice"
-                            onChange={onChangeHandler}
-                            value={productInfo.buyNowPrice}
-                            placeholder="Optional shortcut price"
-                            className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal"
-                        />
-                    </label>
+                <div className="space-y-4 my-5">
+                    {/* Auction status banner */}
+                    <div className={`p-4 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isExpiredOrEnded 
+                            ? 'bg-amber-50/80 border-amber-200 text-amber-900 shadow-2xs' 
+                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-950 shadow-2xs'
+                    }`}>
+                        <div>
+                            <p className="font-semibold text-sm flex items-center gap-1.5">
+                                {isExpiredOrEnded ? '⚠️ Auction Ended / Expired' : '🔨 Live Auction Active'}
+                            </p>
+                            <p className="text-slate-500 mt-1">
+                                {listing?.auctionEndTime ? (
+                                    isExpiredOrEnded 
+                                        ? `Ended on ${new Date(listing.auctionEndTime).toLocaleString()}. Select a duration below to restart and reactivate this auction!`
+                                        : `Ends on ${new Date(listing.auctionEndTime).toLocaleString()}`
+                                ) : 'Auction duration not set'}
+                            </p>
+                        </div>
+                        {listing?.auctionEndTime && !isExpiredOrEnded && (
+                            <div className="shrink-0">
+                                <CountdownTimer endTime={listing.auctionEndTime} compact />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            Starting Bid ({currency})
+                            <input
+                                type="number"
+                                name="startingBid"
+                                onChange={onChangeHandler}
+                                value={productInfo.startingBid}
+                                placeholder="e.g. 1000"
+                                min="1"
+                                className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal"
+                                required
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            Buy It Now Price ({currency})
+                            <input
+                                type="number"
+                                name="buyNowPrice"
+                                onChange={onChangeHandler}
+                                value={productInfo.buyNowPrice}
+                                placeholder="Optional shortcut price"
+                                className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1.5 text-sm font-medium text-slate-700">
+                            Auction Duration
+                            <select
+                                name="duration"
+                                value={productInfo.duration}
+                                onChange={onChangeHandler}
+                                className="p-2.5 px-3 outline-none border border-slate-200 rounded-lg text-sm font-normal bg-white cursor-pointer"
+                            >
+                                {!isExpiredOrEnded && (
+                                    <option value="keep">Keep Current End Time</option>
+                                )}
+                                <option value="1h">1 Hour (Flash Auction)</option>
+                                <option value="6h">6 Hours</option>
+                                <option value="12h">12 Hours</option>
+                                <option value="1d">1 Day</option>
+                                <option value="2d">2 Days</option>
+                                <option value="3d">3 Days (Recommended)</option>
+                                <option value="5d">5 Days</option>
+                                <option value="7d">7 Days (1 Week)</option>
+                                <option value="10d">10 Days</option>
+                                <option value="14d">14 Days (2 Weeks)</option>
+                            </select>
+                            <span className="text-[11px] text-slate-400">
+                                {isExpiredOrEnded ? 'Select time to restart auction' : 'Select to extend or reset duration'}
+                            </span>
+                        </label>
+                    </div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-5">

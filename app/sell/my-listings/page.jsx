@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchSellerListings, toggleListingStock, deleteListing } from "@/lib/api"
 import { assets } from "@/assets/assets"
 import { PlusCircle, Pencil, Trash2 } from "lucide-react"
+import { useUser } from "@clerk/nextjs"
 
 export default function MyListings() {
 
@@ -16,15 +17,18 @@ export default function MyListings() {
     const router = useRouter()
     const queryClient = useQueryClient()
 
+    const { user } = useUser()
     const { data: listings = [], isLoading, error } = useQuery({
         queryKey: ['seller-listings'],
         queryFn: fetchSellerListings,
+        enabled: Boolean(user),
     })
 
     const toggleMutation = useMutation({
         mutationFn: toggleListingStock,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['seller-listings'] })
+            queryClient.invalidateQueries({ queryKey: ['listings'] })
             toast.success("Listing status updated")
         },
         onError: (err) => {
@@ -125,8 +129,25 @@ export default function MyListings() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
-                                            {isAuction && product.auctionEndTime ? (
-                                                <CountdownTimer endTime={product.auctionEndTime} compact />
+                                            {isAuction ? (
+                                                product.status === 'EXPIRED' || (product.auctionEndTime && new Date(product.auctionEndTime) <= new Date()) ? (
+                                                    <div className="flex flex-col gap-1 items-start">
+                                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                                            Ended / Expired
+                                                        </span>
+                                                        <Link 
+                                                            href={`/sell/edit-listing/${product.id}`}
+                                                            className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline font-medium flex items-center gap-0.5"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            Restart &rarr;
+                                                        </Link>
+                                                    </div>
+                                                ) : product.auctionEndTime ? (
+                                                    <CountdownTimer endTime={product.auctionEndTime} compact />
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">Duration not set</span>
+                                                )
                                             ) : (
                                                 <div>
                                                     <span className="text-xs text-slate-400">Buy It Now</span>
@@ -135,16 +156,23 @@ export default function MyListings() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="sr-only peer" 
-                                                    onChange={() => toggleMutation.mutate({ id: product.id, inStock: product.inStock })} 
-                                                    checked={Boolean(product.inStock)} 
-                                                />
-                                                <div className="w-8 h-4 bg-slate-300 rounded-full peer peer-checked:bg-indigo-600 transition-colors"></div>
-                                                <span className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
-                                            </label>
+                                            <div className="inline-flex items-center justify-center gap-1.5">
+                                                {toggleMutation.isPending && toggleMutation.variables?.id === product.id ? (
+                                                    <span className="inline-block size-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                                                ) : (
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="sr-only peer" 
+                                                            disabled={toggleMutation.isPending}
+                                                            onChange={() => toggleMutation.mutate({ id: product.id, inStock: product.inStock })} 
+                                                            checked={Boolean(product.inStock)} 
+                                                        />
+                                                        <div className="w-8 h-4 bg-slate-300 rounded-full peer peer-checked:bg-indigo-600 transition-colors"></div>
+                                                        <span className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
+                                                    </label>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                             <Link 
@@ -163,11 +191,15 @@ export default function MyListings() {
                                                         deleteMutation.mutate(product.id)
                                                     }
                                                 }}
-                                                disabled={deleteMutation.isPending}
+                                                disabled={deleteMutation.isPending && deleteMutation.variables === product.id}
                                                 className="inline-flex items-center text-slate-400 hover:text-red-600 transition p-1.5 rounded-md hover:bg-red-50 disabled:opacity-50"
                                                 title="Delete Listing"
                                             >
-                                                <Trash2 size={16} />
+                                                {deleteMutation.isPending && deleteMutation.variables === product.id ? (
+                                                    <span className="inline-block size-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></span>
+                                                ) : (
+                                                    <Trash2 size={16} />
+                                                )}
                                             </button>
                                         </td>
                                     </tr>

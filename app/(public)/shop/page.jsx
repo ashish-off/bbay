@@ -13,15 +13,9 @@ function ShopContent() {
     const typeParam = searchParams.get('type')
     const router = useRouter()
 
-    const [listingFilter, setListingFilter] = useState('all') // 'all' | 'auction' | 'fixed'
-
-    useEffect(() => {
-        if (typeParam === 'auction' || typeParam === 'fixed') {
-            setListingFilter(typeParam)
-        } else {
-            setListingFilter('all')
-        }
-    }, [typeParam])
+    const [userFilter, setUserFilter] = useState(null)
+    const listingFilter = userFilter ?? (typeParam === 'auction' || typeParam === 'fixed' ? typeParam : 'all')
+    const setListingFilter = (val) => setUserFilter(val)
 
     const queryType = listingFilter === 'auction' ? 'AUCTION' : listingFilter === 'fixed' ? 'FIXED' : undefined
 

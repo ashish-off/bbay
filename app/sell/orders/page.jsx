@@ -2,10 +2,11 @@
 import { useState } from "react"
 import Loading from "@/components/Loading"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchSellerOrders, updateSellerOrderStatus } from "@/lib/api"
+import { fetchSellerOrders, updateSellerOrderStatus, deleteSellerOrder } from "@/lib/api"
 import { useUser } from "@clerk/nextjs"
 import toast from "react-hot-toast"
 import Image from "next/image"
+import { Trash2 } from "lucide-react"
 
 export default function SellerOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु'
@@ -32,8 +33,26 @@ export default function SellerOrders() {
         }
     })
 
+    const deleteMutation = useMutation({
+        mutationFn: deleteSellerOrder,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['seller-orders'] })
+            toast.success('Order deleted successfully!')
+            closeModal()
+        },
+        onError: (err) => {
+            toast.error(err.message || 'Failed to delete order')
+        }
+    })
+
     const handleUpdateStatus = (orderId, status) => {
         statusMutation.mutate({ orderId, status })
+    }
+
+    const handleDeleteOrder = (orderId, orderNum) => {
+        if (window.confirm(`Are you sure you want to delete order #${orderNum}? This action cannot be undone.`)) {
+            deleteMutation.mutate(orderId)
+        }
     }
 
     const openModal = (order) => {
@@ -61,8 +80,8 @@ export default function SellerOrders() {
                     <table className="w-full text-sm text-left text-slate-600">
                         <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
                             <tr>
-                                {["No.", "Buyer", "Amount", "Payment", "Status", "Date"].map((heading, i) => (
-                                    <th key={i} className="px-4 py-3">{heading}</th>
+                                {["No.", "Buyer", "Amount", "Payment", "Status", "Date", "Action"].map((heading, i) => (
+                                    <th key={i} className={`px-4 py-3 ${heading === 'Action' ? 'text-center' : ''}`}>{heading}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -80,20 +99,53 @@ export default function SellerOrders() {
                                     <td className="px-4 py-3 font-semibold text-slate-800">{currency}{order.total.toLocaleString()}</td>
                                     <td className="px-4 py-3 text-xs">{order.paymentMethod}</td>
                                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                        <select
-                                            value={order.status}
-                                            onChange={e => handleUpdateStatus(order.id, e.target.value)}
-                                            disabled={statusMutation.isPending}
-                                            className="border border-slate-200 bg-white rounded-lg text-xs p-1.5 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium"
-                                        >
-                                            <option value="ORDER_PLACED">ORDER_PLACED</option>
-                                            <option value="PROCESSING">PROCESSING</option>
-                                            <option value="SHIPPED">SHIPPED</option>
-                                            <option value="DELIVERED">DELIVERED</option>
-                                        </select>
+                                        <div className="inline-flex items-center gap-1.5">
+                                            <select
+                                                value={order.status}
+                                                onChange={e => handleUpdateStatus(order.id, e.target.value)}
+                                                disabled={statusMutation.isPending && statusMutation.variables?.orderId === order.id}
+                                                className={`border rounded-lg text-xs p-1.5 outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer font-medium ${
+                                                    order.status === 'DELIVERED'
+                                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                                        : order.status === 'SHIPPED'
+                                                        ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                                        : order.status === 'PROCESSING'
+                                                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                                        : 'bg-white text-slate-700 border-slate-200'
+                                                }`}
+                                            >
+                                                <option value="ORDER_PLACED">ORDER_PLACED</option>
+                                                <option value="PROCESSING">PROCESSING</option>
+                                                <option value="SHIPPED">SHIPPED</option>
+                                                <option value="DELIVERED">DELIVERED</option>
+                                            </select>
+                                            {statusMutation.isPending && statusMutation.variables?.orderId === order.id && (
+                                                <span className="inline-block size-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-4 py-3 text-slate-400 text-xs">
                                         {new Date(order.createdAt).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteOrder(order.id, index + 1)}
+                                            disabled={deleteMutation.isPending && deleteMutation.variables === order.id}
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                                                order.status === 'DELIVERED'
+                                                    ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                                    : 'text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent'
+                                            }`}
+                                            title={order.status === 'DELIVERED' ? "Delete completed order" : "Delete order"}
+                                        >
+                                            {deleteMutation.isPending && deleteMutation.variables === order.id ? (
+                                                <span className="inline-block size-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></span>
+                                            ) : (
+                                                <Trash2 size={14} />
+                                            )}
+                                            <span>Delete</span>
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -106,9 +158,18 @@ export default function SellerOrders() {
             {isModalOpen && selectedOrder && (
                 <div onClick={closeModal} className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-xs text-slate-700 text-sm z-50 p-4" >
                     <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative animate-in fade-in zoom-in-95 duration-200">
-                        <h2 className="text-lg font-bold text-slate-900 mb-4">
-                            Order Details
-                        </h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-slate-900">
+                                Order Details
+                            </h2>
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                                selectedOrder.status === 'DELIVERED'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-indigo-100 text-indigo-800'
+                            }`}>
+                                {selectedOrder.status}
+                            </span>
+                        </div>
 
                         {/* Customer Details */}
                         <div className="mb-4 text-xs space-y-1 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
@@ -151,9 +212,24 @@ export default function SellerOrders() {
                                 <p className="text-xs text-slate-400">Total Amount</p>
                                 <p className="text-base font-bold text-indigo-600">{currency}{selectedOrder.total.toLocaleString()}</p>
                             </div>
-                            <button onClick={closeModal} className="px-4 py-2 bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer transition" >
-                                Close
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleDeleteOrder(selectedOrder.id, '')}
+                                    disabled={deleteMutation.isPending}
+                                    className="px-3.5 py-2 bg-red-50 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-100 cursor-pointer transition flex items-center gap-1.5"
+                                >
+                                    {deleteMutation.isPending ? (
+                                        <span className="inline-block size-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></span>
+                                    ) : (
+                                        <Trash2 size={14} />
+                                    )}
+                                    Delete Order
+                                </button>
+                                <button onClick={closeModal} className="px-4 py-2 bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg hover:bg-slate-200 cursor-pointer transition" >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

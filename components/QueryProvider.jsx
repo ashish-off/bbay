@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
+import ServerProgressBar from '@/components/ServerProgressBar'
 
 export default function QueryProvider({ children }) {
     const [queryClient] = useState(() => new QueryClient({
@@ -18,6 +19,7 @@ export default function QueryProvider({ children }) {
 
     return (
         <QueryClientProvider client={queryClient}>
+            <ServerProgressBar />
             {children}
         </QueryClientProvider>
     )
