@@ -91,6 +91,8 @@ model Listing {
     buyNowPrice    Float?
     bidCount       Int           @default(0)
     auctionEndTime DateTime?
+    winnerId       String?
+    winnerBidId    String?
 
     // Seller (any user can list)
     sellerId       String
@@ -111,6 +113,7 @@ model Listing {
     @@index([category])
     @@index([listingType, status])
     @@index([auctionEndTime])
+    @@index([winnerId])
 }
 
 // ─── Bid ────────────────────────────────────────────────────────────

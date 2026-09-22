@@ -39,7 +39,13 @@ export async function GET(request) {
         }
 
         // 3. Mark orders as paid
-        const orderIds = transaction_uuid.split('-')
+        const isAuction = transaction_uuid.startsWith('auction-')
+        let orderIds = []
+        if (isAuction) {
+            orderIds = [transaction_uuid.replace(/^auction-/, '')]
+        } else {
+            orderIds = transaction_uuid.split('-')
+        }
 
         // Try finding individual orders, or find by composite transaction_uuid
         let orders = await prisma.order.findMany({
@@ -81,6 +87,7 @@ export async function GET(request) {
                             data: {
                                 stock: remaining,
                                 inStock: remaining > 0,
+                                ...(isAuction ? { status: 'SOLD' } : {}),
                             },
                         })
                     }
@@ -88,8 +95,8 @@ export async function GET(request) {
             }
         }
 
-        // Clear cart for the buyer on successful payment verification
-        if (orders.length > 0 && orders[0].userId) {
+        // Clear cart for regular purchases only (not for won auctions)
+        if (!isAuction && orders.length > 0 && orders[0].userId) {
             const buyerId = orders[0].userId
             await prisma.cartItem.deleteMany({ where: { userId: buyerId } })
             await prisma.user.update({ where: { id: buyerId }, data: { cart: {} } })

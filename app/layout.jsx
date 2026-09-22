@@ -1,12 +1,16 @@
-import { Outfit } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "react-hot-toast";
 import StoreProvider from "@/app/StoreProvider";
 import "./globals.css";
-import {ClerkProvider} from '@clerk/nextjs'
+import { ClerkProvider } from '@clerk/nextjs';
 
 import QueryProvider from "@/components/QueryProvider";
 
-const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"] });
+const outfit = localFont({
+    src: "./fonts/outfit.woff2",
+    display: "swap",
+    fallback: ["system-ui", "sans-serif"],
+});
 
 export const metadata = {
     title: "bbay - Bid, Buy & Sell",

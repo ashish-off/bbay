@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import AddressModal from './AddressModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchAddresses, validateCouponApi, createOrderApi, initiateEsewaPayment } from '@/lib/api';
+import { DELIVERY_FEE, COD_FEE, calculateOrderBilling } from '@/lib/pricing';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { useUser, useClerk } from '@clerk/nextjs';
@@ -116,46 +117,70 @@ const OrderSummary = ({ totalPrice, items }) => {
         }
     };
 
-    const discountAmount = coupon ? Math.round((coupon.discount / 100) * totalPrice) : 0;
-    const finalTotal = Math.max(0, totalPrice - discountAmount);
+    const billing = calculateOrderBilling({
+        subtotal: totalPrice,
+        discountPercent: coupon?.discount || 0,
+        paymentMethod,
+    });
+    const { discountAmount, deliveryFee, paymentFee, finalTotal } = billing;
 
     return (
         <div className='w-full max-w-lg lg:max-w-[340px] bg-white border border-slate-200 text-slate-500 text-sm rounded-2xl p-6 shadow-xs'>
             <h2 className='text-lg font-bold text-slate-800'>Payment Summary</h2>
             
             <p className='text-slate-400 text-xs mt-4 mb-2 uppercase tracking-wider font-semibold'>Payment Method</p>
-            <div className='space-y-2'>
-                <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition ${paymentMethod === 'COD' ? 'border-indigo-600 bg-indigo-50/40 text-slate-800' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <input 
-                        type="radio" 
-                        id="COD" 
-                        name='payment' 
-                        onChange={() => setPaymentMethod('COD')} 
-                        checked={paymentMethod === 'COD'} 
-                        className='accent-indigo-600' 
-                    />
-                    <span className='text-xs font-medium'>Cash on Delivery (COD)</span>
+            <div className='space-y-2.5'>
+                <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${paymentMethod === 'COD' ? 'border-indigo-600 bg-indigo-50/40 text-slate-800 shadow-xs ring-1 ring-indigo-500/20' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className='flex items-center gap-2.5'>
+                        <input 
+                            type="radio" 
+                            id="COD" 
+                            name='payment' 
+                            onChange={() => setPaymentMethod('COD')} 
+                            checked={paymentMethod === 'COD'} 
+                            className='accent-indigo-600 size-4 cursor-pointer' 
+                        />
+                        <div>
+                            <span className='text-xs font-semibold text-slate-800 block'>Cash on Delivery</span>
+                            <span className='text-[11px] text-slate-400'>Pay at doorstep</span>
+                        </div>
+                    </div>
+                    <span className='text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md'>
+                        +{currency}{COD_FEE} Fee
+                    </span>
                 </label>
-                <label className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition ${paymentMethod === 'ESEWA' ? 'border-green-600 bg-green-50/40 text-green-900' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <input 
-                        type="radio" 
-                        id="ESEWA" 
-                        name='payment' 
-                        onChange={() => setPaymentMethod('ESEWA')} 
-                        checked={paymentMethod === 'ESEWA'} 
-                        className='accent-green-600' 
-                    />
-                    <span className='text-xs font-semibold text-green-700'>eSewa</span>
+
+                <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${paymentMethod === 'ESEWA' ? 'border-green-600 bg-green-50/40 text-green-900 shadow-xs ring-1 ring-green-500/20' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className='flex items-center gap-2.5'>
+                        <input 
+                            type="radio" 
+                            id="ESEWA" 
+                            name='payment' 
+                            onChange={() => setPaymentMethod('ESEWA')} 
+                            checked={paymentMethod === 'ESEWA'} 
+                            className='accent-green-600 size-4 cursor-pointer' 
+                        />
+                        <div>
+                            <span className='text-xs font-semibold text-slate-800 block'>eSewa (Pay Now)</span>
+                            <span className='text-[11px] text-slate-400'>Instant digital wallet</span>
+                        </div>
+                    </div>
+                    <span className='text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md'>
+                        {currency}0 Fee (Free)
+                    </span>
                 </label>
-                <label className='flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 cursor-not-allowed opacity-50'>
-                    <input 
-                        type="radio" 
-                        id="KHALTI" 
-                        name='payment' 
-                        disabled
-                        className='accent-purple-600' 
-                    />
-                    <span className='text-xs font-medium text-slate-400'>Khalti</span>
+
+                <label className='flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 cursor-not-allowed opacity-50'>
+                    <div className='flex items-center gap-2.5'>
+                        <input 
+                            type="radio" 
+                            id="KHALTI" 
+                            name='payment' 
+                            disabled
+                            className='accent-purple-600 size-4' 
+                        />
+                        <span className='text-xs font-medium text-slate-400'>Khalti</span>
+                    </div>
                     <span className='ml-auto text-[10px] font-semibold bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full'>Coming Soon</span>
                 </label>
             </div>
@@ -221,7 +246,17 @@ const OrderSummary = ({ totalPrice, items }) => {
                 </div>
                 <div className='flex justify-between text-xs'>
                     <span className='text-slate-500'>Delivery Fee</span>
-                    <span className='font-semibold text-emerald-600'>Free</span>
+                    <span className='font-semibold text-slate-800'>{currency}{deliveryFee.toLocaleString()}</span>
+                </div>
+                <div className='flex justify-between text-xs'>
+                    <span className='text-slate-500'>
+                        Payment Fee {paymentMethod === 'COD' ? '(COD Handling)' : '(Pay Now)'}
+                    </span>
+                    {paymentMethod === 'COD' ? (
+                        <span className='font-semibold text-amber-700'>+{currency}{paymentFee.toLocaleString()}</span>
+                    ) : (
+                        <span className='font-semibold text-emerald-600'>{currency}0 (Free)</span>
+                    )}
                 </div>
                 {coupon && (
                     <div className='flex justify-between text-xs text-emerald-600'>
@@ -262,7 +297,12 @@ const OrderSummary = ({ totalPrice, items }) => {
             </div>
 
             <div className='flex justify-between py-4 text-base'>
-                <p className='font-semibold text-slate-700'>Total:</p>
+                <div>
+                    <p className='font-semibold text-slate-700'>Total:</p>
+                    <p className='text-[11px] text-slate-400'>
+                        Incl. {currency}{deliveryFee} delivery{paymentMethod === 'COD' ? ` + ${currency}${paymentFee} COD` : ''}
+                    </p>
+                </div>
                 <p className='font-bold text-right text-indigo-600 text-lg'>
                     {currency}{finalTotal.toLocaleString()}
                 </p>
@@ -280,7 +320,7 @@ const OrderSummary = ({ totalPrice, items }) => {
                         {isEsewaProcessing ? 'Redirecting to eSewa...' : 'Processing Order...'}
                     </>
                 ) : (
-                    paymentMethod === 'ESEWA' ? 'Pay with eSewa' : 'Place Order'
+                    paymentMethod === 'ESEWA' ? `Pay ${currency}${finalTotal.toLocaleString()} with eSewa` : `Place Order • ${currency}${finalTotal.toLocaleString()}`
                 )}
             </button>
 

@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import { getAuthUser } from '@/lib/auth'
 import { generateEsewaSignature, buildSignatureMessage } from '@/lib/esewa'
+import { DELIVERY_FEE } from '@/lib/pricing'
 
 // POST /api/esewa/initiate — Create order + return eSewa form params
 export async function POST(request) {
@@ -98,10 +99,17 @@ export async function POST(request) {
     const orders = await prisma.$transaction(async (tx) => {
         const createdOrders = []
 
-        for (const [sellerId, group] of Object.entries(sellerGroups)) {
+        const sellerEntries = Object.entries(sellerGroups)
+        for (let i = 0; i < sellerEntries.length; i++) {
+            const [sellerId, group] = sellerEntries[i]
             let total = group.total
             if (discountPercent > 0) {
                 total = total - (total * discountPercent / 100)
+            }
+
+            // Apply delivery fee (Rs 100) once per checkout (pay now has Rs 0 COD fee)
+            if (i === 0) {
+                total += DELIVERY_FEE
             }
 
             const order = await tx.order.create({

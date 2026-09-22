@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { getAuthUser } from '@/lib/auth'
+import { DELIVERY_FEE, COD_FEE } from '@/lib/pricing'
 
 // GET /api/orders — Auth required, get buyer's orders
 export async function GET() {
@@ -131,10 +132,19 @@ export async function POST(request) {
     const orders = await prisma.$transaction(async (tx) => {
         const createdOrders = []
 
-        for (const [sellerId, group] of Object.entries(sellerGroups)) {
+        const sellerEntries = Object.entries(sellerGroups)
+        for (let i = 0; i < sellerEntries.length; i++) {
+            const [sellerId, group] = sellerEntries[i]
             let total = group.total
             if (discountPercent > 0) {
                 total = total - (total * discountPercent / 100)
+            }
+
+            // Apply delivery fee (Rs 100) and COD fee (Rs 20 for COD, 0 for pay now) once per checkout
+            if (i === 0) {
+                const deliveryFee = DELIVERY_FEE
+                const paymentFee = (paymentMethod || 'COD') === 'COD' ? COD_FEE : 0
+                total += deliveryFee + paymentFee
             }
 
             const order = await tx.order.create({

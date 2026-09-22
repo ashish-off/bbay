@@ -13,12 +13,9 @@ const BidInput = ({ product }) => {
     const queryClient = useQueryClient()
 
     const minBid = (product.currentBid || product.startingBid || 0) + 100
-    const [bidAmount, setBidAmount] = useState(minBid)
+    const [customBidAmount, setCustomBidAmount] = useState(null)
+    const bidAmount = customBidAmount !== null ? customBidAmount : minBid
     const [showConfirm, setShowConfirm] = useState(false)
-
-    useEffect(() => {
-        setBidAmount((product.currentBid || product.startingBid || 0) + 100)
-    }, [product.currentBid, product.startingBid])
 
     const mutation = useMutation({
         mutationFn: placeBid,
@@ -27,7 +24,7 @@ const BidInput = ({ product }) => {
             queryClient.invalidateQueries({ queryKey: ['bids', product.id] })
             toast.success(`Bid of ${currency}${bidAmount.toLocaleString()} placed!`)
             setShowConfirm(false)
-            setBidAmount(bidAmount + 100)
+            setCustomBidAmount(null)
         },
         onError: (err) => {
             setShowConfirm(false)
@@ -62,6 +59,44 @@ const BidInput = ({ product }) => {
         })
     }
 
+    const isEnded = product.status === 'SOLD' || 
+                    product.status === 'EXPIRED' || 
+                    (product.auctionEndTime && new Date(product.auctionEndTime) < new Date())
+    const isWinner = user && (product.winnerId === user.id || (isEnded && product.bids?.[0]?.bidderId === user.id))
+
+    if (isEnded) {
+        if (isWinner) {
+            return (
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-indigo-50 border border-amber-200/80 shadow-xs">
+                    <div className="flex items-center gap-2 text-amber-800 font-bold text-base">
+                        <span>🏆</span>
+                        <span>Congratulations! You won this auction!</span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 mb-4">
+                        Winning bid: <strong className="text-slate-900">{currency}{(product.currentBid || product.startingBid || 0).toLocaleString()}</strong>. Complete your delivery details and payment to claim your item.
+                    </p>
+                    <a
+                        href={`/auction/checkout/${product.id}`}
+                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-6 py-2.5 rounded-full shadow-xs transition"
+                    >
+                        Proceed to Checkout →
+                    </a>
+                </div>
+            )
+        }
+
+        return (
+            <div className="p-4 rounded-xl bg-slate-100 border border-slate-200 text-center">
+                <p className="font-semibold text-slate-700 text-sm">This auction has ended</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                    {product.status === 'SOLD' || (product.bidCount && product.bidCount > 0)
+                        ? `Winning bid: ${currency}${(product.currentBid || 0).toLocaleString()}`
+                        : 'No bids were placed'}
+                </p>
+            </div>
+        )
+    }
+
     return (
         <>
             <div className="flex flex-col gap-3">
@@ -74,7 +109,7 @@ const BidInput = ({ product }) => {
                             min={minBid}
                             step={100}
                             value={bidAmount}
-                            onChange={(e) => setBidAmount(Number(e.target.value))}
+                            onChange={(e) => setCustomBidAmount(Number(e.target.value))}
                             className="w-32 px-3 py-2.5 outline-none text-sm"
                         />
                     </div>

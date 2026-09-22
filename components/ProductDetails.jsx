@@ -18,6 +18,11 @@ const ProductDetails = ({ product }) => {
     const productId = product.id;
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || 'रु';
     const isAuction = product.listingType?.toLowerCase() === 'auction';
+    const isAuctionEnded = isAuction && (
+        product.status === 'SOLD' || 
+        product.status === 'EXPIRED' || 
+        (product.auctionEndTime && new Date(product.auctionEndTime) < new Date())
+    );
 
     const cart = useSelector(state => state.cart.cartItems);
     const watchlist = useSelector(state => state.watchlist.items);
@@ -191,7 +196,7 @@ const ProductDetails = ({ product }) => {
                         <BidInput product={product} />
 
                         {/* Buy It Now & Add to Cart on Auction */}
-                        {product.buyNowPrice && (
+                        {product.buyNowPrice && !isAuctionEnded && (
                             <div className="mt-6 pt-6 border-t border-slate-200">
                                 <p className="text-xs text-slate-400 mb-3">Don&apos;t want to wait for the auction to end?</p>
                                 <div className="flex flex-wrap items-center gap-3">

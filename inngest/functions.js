@@ -74,6 +74,7 @@ export const expireAuctions = inngest.createFunction(
         // Mark each expired auction
         for (const listing of expiredListings) {
             const hasBids = listing.bids.length > 0
+            const winningBid = hasBids ? listing.bids[0] : null
 
             await step.run(`expire-listing-${listing.id}`, async () => {
                 await prisma.listing.update({
@@ -81,17 +82,17 @@ export const expireAuctions = inngest.createFunction(
                     data: {
                         status: hasBids ? 'SOLD' : 'EXPIRED',
                         inStock: false,
+                        // Record the auction winner
+                        ...(winningBid ? {
+                            winnerId: winningBid.bidderId,
+                            winnerBidId: winningBid.id,
+                        } : {}),
                     },
                 })
             })
-
-            // TODO: Future — auto-create order for auction winner
-            // if (hasBids) {
-            //     const winner = listing.bids[0].bidder
-            //     await step.run(`create-winner-order-${listing.id}`, ...)
-            // }
         }
 
         return { expired: expiredListings.length }
     }
 )
+
