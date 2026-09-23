@@ -191,6 +191,11 @@ const Navbar = () => {
                       label="Order Activity"
                       onClick={() => router.push("/orders")}
                     />
+                    <UserButton.Action
+                      labelIcon={<PackageIcon size={16} />}
+                      label="Seller Dashboard"
+                      onClick={() => router.push("/sell")}
+                    />
                     {isAdmin && (
                       <UserButton.Action
                         labelIcon={<ShieldCheck size={16} />}
